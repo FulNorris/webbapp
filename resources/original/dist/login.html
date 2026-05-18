@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b91822">
+  <meta name="description" content="Inloggning till Stuckbema Leveransdokument">
+  <title>Stuckbema - Inloggning</title>
+  <link rel="manifest" href="manifest.webmanifest?v=20260505-01">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png?v=20260505-01">
+  <link rel="stylesheet" href="style.css?v=20260505-01">
+  <link rel="stylesheet" href="login.css?v=20260505-01">
+</head>
+<body class="login-page">
+  <div class="login-container">
+    <div class="login-box">
+      <div class="login-header">
+        <img src="assets/logo.png" alt="Stuckbema" class="login-logo">
+        <h1>Leveransdokument</h1>
+        <p class="login-subtitle">Intern leveranssystem</p>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <form id="loginForm" class="login-form">
+        <div class="form-group">
+          <label for="loginEmail">E-postadress</label>
+          <input
+            id="loginEmail"
+            type="email"
+            name="email"
+            placeholder="din@exempel.se"
+            required
+            autocomplete="email"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="loginPassword">Lösenord</label>
+          <input
+            id="loginPassword"
+            type="password"
+            name="password"
+            placeholder="••••••••"
+            required
+            autocomplete="current-password"
+          >
+        </div>
+
+        <button type="submit" class="btn-login">Logga in</button>
+
+        <div id="loginError" class="error-message" style="display: none;"></div>
+      </form>
+
+      <div class="login-footer">
+        <button id="forgotPasswordBtn" type="button" class="link-button">Glömt lösenord?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FORGOT PASSWORD MODAL -->
+  <div id="forgotPasswordModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Återställ lösenord</h2>
+        <button type="button" class="modal-close" id="closeForgotModal">&times;</button>
+      </div>
+
+      <form id="forgotPasswordForm" class="modal-form">
+        <p class="modal-description">Ange din e-postadress så skickar vi instruktioner för lösenordsåterställning.</p>
+
+        <div class="form-group">
+          <label for="resetEmail">E-postadress</label>
+          <input
+            id="resetEmail"
+            type="email"
+            name="email"
+            placeholder="din@exempel.se"
+            required
+            autocomplete="email"
+          >
+        </div>
+
+        <button type="submit" class="btn-primary">Skicka återställning</button>
+        <div id="forgotPasswordError" class="error-message" style="display: none;"></div>
+        <div id="forgotPasswordSuccess" class="success-message" style="display: none;"></div>
+      </form>
+
+      <!-- RESET PASSWORD FORM (visas efter token mottages) -->
+      <form id="resetPasswordForm" class="modal-form" style="display: none;">
+        <p class="modal-description">Ange reset-token och ditt nya lösenord.</p>
+
+        <div class="form-group">
+          <label for="resetToken">Reset-token</label>
+          <input
+            id="resetToken"
+            type="text"
+            name="token"
+            placeholder="Klistra in din token här"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="newResetPassword">Nytt lösenord</label>
+          <input
+            id="newResetPassword"
+            type="password"
+            name="password"
+            placeholder="Minst 8 tecken"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="newResetPasswordConfirm">Bekräfta lösenord</label>
+          <input
+            id="newResetPasswordConfirm"
+            type="password"
+            name="passwordConfirm"
+            placeholder="Bekräfta lösenord"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <button type="submit" class="btn-primary">Återställ lösenord</button>
+        <div id="resetPasswordError" class="error-message" style="display: none;"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CHANGE PASSWORD MODAL (för första login) -->
+  <div id="changePasswordModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Byt lösenord</h2>
+      </div>
+
+      <form id="changePasswordForm" class="modal-form">
+        <p class="modal-description">Du måste byta lösenord vid första inloggning.</p>
+
+        <div class="form-group">
+          <label for="currentPassword">Nuvarande lösenord</label>
+          <input
+            id="currentPassword"
+            type="password"
+            name="currentPassword"
+            placeholder="••••••••"
+            required
+            autocomplete="current-password"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="newPassword">Nytt lösenord</label>
+          <input
+            id="newPassword"
+            type="password"
+            name="newPassword"
+            placeholder="Minst 8 tecken"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="newPasswordConfirm">Bekräfta lösenord</label>
+          <input
+            id="newPasswordConfirm"
+            type="password"
+            name="newPasswordConfirm"
+            placeholder="Bekräfta lösenord"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <button type="submit" class="btn-primary">Byt lösenord</button>
+        <div id="changePasswordError" class="error-message" style="display: none;"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="core.js?v=20260506-01"></script>
+  <script src="config.js?v=20260505-01"></script>
+  <script src="environment.js?v=20260505-01"></script>
+  <script src="auth.js?v=20260505-01"></script>
+  <script src="login.js?v=20260505-01"></script>
+</body>
+</html>

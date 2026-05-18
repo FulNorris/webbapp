@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b91822">
+  <meta name="description" content="Intern app för Stuckbema leveransdokument.">
+  <title>Stuckbema Leveransdokument</title>
+  <link rel="manifest" href="manifest.webmanifest?v=20260505-01">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png?v=20260505-01">
+  <link rel="stylesheet" href="style.css?v=20260505-01">
+</head>
+<body>
+  <div class="app-shell">
+    <div class="top-menu-bar">
+      <div class="menu-left">
+        <div class="dropdown" id="mainDropdown">
+          <button class="menu-btn" type="button" id="dropBtn" aria-expanded="false" aria-haspopup="menu" aria-controls="mainMenu">Meny ▾</button>
+          <div class="dropdown-content" id="mainMenu" role="menu">
+            <button id="printBtn" type="button" role="menuitem">Skriv ut</button>
+            <button id="pdfBtn" type="button" role="menuitem">Skapa PDF</button>
+            <button id="clearBtn" class="danger-text" type="button" role="menuitem">Rensa allt</button>
+            <button id="adminPanelBtn" type="button" role="menuitem" hidden>Adminpanel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="menu-right">
+        <div class="user-info">
+          <span id="userDisplay"></span>
+        </div>
+        <button class="menu-btn logout-btn" type="button" id="logoutBtn" title="Logga ut">Logga ut</button>
+      </div>
+    </div>
+
+    <header class="brand-header">
+      <img src="assets/logo.png" alt="Stuckbema" class="logo">
+      <h1>Leveransdokument</h1>
+    </header>
+
+    <section class="overview-strip" aria-label="Leveransöversikt">
+      <button class="metric-card metric-action category-card is-active" type="button" data-category="ongoing" aria-pressed="true">
+        <span>Pågående</span>
+        <strong id="pendingCount">0</strong>
+      </button>
+      <button class="metric-card metric-action category-card" type="button" data-category="delivered" aria-pressed="false">
+        <span>Levererade</span>
+        <strong id="deliveredCount">0</strong>
+      </button>
+      <button class="metric-card metric-action category-card" type="button" data-category="articles" aria-pressed="false">
+        <span>Artiklar</span>
+        <strong id="articleCount">0</strong>
+      </button>
+      <button class="metric-card metric-action category-card" type="button" data-category="all" aria-pressed="false">
+        <span>Se alla</span>
+        <strong id="allCount">0</strong>
+      </button>
+      <button id="notificationBtn" class="metric-card metric-action" type="button" hidden>
+        <span>Notiser</span>
+        <strong>Av</strong>
+      </button>
+      <button id="visibilityBtn" class="metric-card metric-action visibility-toggle" type="button">
+        <span>Synlighet</span>
+        <strong>Offline</strong>
+      </button>
+    </section>
+
+    <section id="notificationPanel" class="notification-panel" aria-label="Notisinställningar" hidden>
+      <div class="notification-panel-head">
+        <div>
+          <h2>Notiser</h2>
+          <p id="notificationStatusText">Kontrollerar status...</p>
+        </div>
+        <button id="notificationPanelCloseBtn" class="small-action" type="button">Stäng</button>
+      </div>
+      <dl class="notification-status-grid">
+        <div>
+          <dt>Status</dt>
+          <dd id="notificationEnabledText">Okänd</dd>
+        </div>
+        <div>
+          <dt>Platform</dt>
+          <dd id="notificationPlatformText">Okänd</dd>
+        </div>
+        <div>
+          <dt>Behörighet</dt>
+          <dd id="notificationPermissionText">Okänd</dd>
+        </div>
+        <div>
+          <dt>Provider</dt>
+          <dd id="notificationProviderText">Okänd</dd>
+        </div>
+      </dl>
+      <div id="notificationMessage" class="notification-message" role="status" aria-live="polite"></div>
+      <div class="notification-actions">
+        <button id="notificationEnableBtn" class="primary" type="button">Aktivera notiser</button>
+        <button id="notificationDisableBtn" class="ghost" type="button">Stäng av notiser</button>
+        <button id="notificationTestBtn" class="small-action" type="button">Skicka testnotis</button>
+      </div>
+    </section>
+
+    <main>
+      <section class="panel form-panel">
+        <div class="section-head">
+          <div>
+            <h2>Ny leverans</h2>
+          </div>
+        </div>
+
+        <form id="deliveryForm" data-testid="new-delivery-form" autocomplete="off">
+          <input type="hidden" id="editId">
+
+          <div class="form-group-wrap">
+            <div class="form-section-title">Leveransuppgifter</div>
+            <div class="grid main-fields">
+              <label>
+                <span>Adress</span>
+                <input id="adress" name="adress" type="text" placeholder="Gata, postnummer, ort" required>
+              </label>
+              <label>
+                <span>Tele</span>
+                <input id="tele" name="tele" type="tel" inputmode="tel" placeholder="0701234567" autocomplete="off" required>
+              </label>
+              <label>
+                <span>Mottagare</span>
+                <input id="mottagare" name="mottagare" type="text" placeholder="Namn" autocomplete="off" required>
+              </label>
+              <label>
+                <span>E-post</span>
+                <input id="recipientEmail" name="recipientEmail" type="email" placeholder="kund@example.se" autocomplete="off">
+              </label>
+              <label>
+                <span>Önskat leveransdatum</span>
+                <input id="desiredDeliveryDate" name="desiredDeliveryDate" type="date" required>
+              </label>
+              <label>
+                <span>Önskad leveranstid</span>
+                <input id="desiredDeliveryTime" name="desiredDeliveryTime" type="time" required>
+              </label>
+              <label>
+                <span>Prioritet</span>
+                <select id="priority" name="priority">
+                  <option value="">Normal</option>
+                  <option value="high">Hög</option>
+                  <option value="low">Låg</option>
+                </select>
+              </label>
+              <label>
+                <span>Ansvarig förare</span>
+                <input id="assignedDriverId" name="assignedDriverId" type="text" placeholder="Förar-ID eller namn" autocomplete="off">
+              </label>
+              <label>
+                <span>Övrigt</span>
+                <input id="ovrigt" name="ovrigt" type="text" placeholder="Portkod, våning, info">
+              </label>
+              <label>
+                <span>Intern kommentar</span>
+                <input id="internalComment" name="internalComment" type="text" placeholder="Syns endast internt">
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group-wrap">
+            <div class="items-header">
+              <div>
+                <div class="form-section-title">Artiklar</div>
+                <p class="section-copy compact">Lägg till alla antal och artiklar som hör till samma leverans.</p>
+              </div>
+              <button type="button" id="addItemBtn" class="secondary-btn">+ Lägg till artikel</button>
+            </div>
+
+            <div id="itemsContainer" class="items-container" aria-live="polite"></div>
+            <datalist id="workOrderSuggestions"></datalist>
+          </div>
+
+          <div class="form-actions">
+            <button class="primary" type="submit" id="saveBtn">Spara leverans</button>
+            <button class="ghost" type="button" id="resetBtn">Återställ</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel list-panel" data-testid="delivery-list-panel">
+        <div class="section-head compact section-head-stack">
+          <div>
+            <h2>Leveranslista</h2>
+            <p id="rowCount">0 leveranser</p>
+          </div>
+          <div class="list-controls">
+            <div class="segmented-control" data-testid="delivery-status-tabs" role="group" aria-label="Filtrera leveranser">
+              <button type="button" data-filter="all" aria-pressed="true">Alla</button>
+              <button type="button" data-filter="pending" aria-pressed="false">Pågående</button>
+              <button type="button" data-filter="delivered" aria-pressed="false">Levererade</button>
+            </div>
+            <label class="search-wrap" data-testid="delivery-search" for="searchInput">
+              <span class="sr-only">Sök i leveranslistan</span>
+              <input id="searchInput" type="search" placeholder="Sök adress, mottagare, telefon eller artikel" autocomplete="off">
+            </label>
+          </div>
+        </div>
+
+        <div id="deliveryList" class="delivery-list"></div>
+        <div id="articleOverview" class="article-overview" hidden></div>
+        <div id="emptyState" class="empty-state" role="status" aria-live="polite">Inga leveranser ännu.</div>
+      </section>
+    </main>
+  </div>
+
+  <section id="adminPanel" class="admin-panel-backdrop" hidden aria-modal="true" role="dialog" aria-labelledby="adminPanelTitle">
+    <div class="admin-panel">
+      <header class="admin-panel-header">
+        <div>
+          <p class="eyebrow">System</p>
+          <h2 id="adminPanelTitle">Adminpanel</h2>
+          <p>Hantera användare, roller, inställningar och databasstatus.</p>
+        </div>
+        <button id="adminPanelCloseBtn" class="modal-close admin-close" type="button" aria-label="Stäng Adminpanel">&times;</button>
+      </header>
+
+      <div id="adminPanelMessage" class="admin-message" role="status" aria-live="polite"></div>
+
+      <div class="admin-grid">
+        <section class="admin-card">
+          <div class="admin-card-head">
+            <h3>Databas och drift</h3>
+            <button id="adminRefreshBtn" class="small-action" type="button">Uppdatera</button>
+          </div>
+          <div id="adminSummary" class="admin-summary-grid"></div>
+        </section>
+
+        <section class="admin-card" id="adminSettingsSection">
+          <div class="admin-card-head">
+            <h3>Systeminställningar</h3>
+          </div>
+          <form id="adminSettingsForm" class="admin-form">
+            <label>
+              <span>Appnamn</span>
+              <input id="settingsAppTitle" name="appTitle" type="text" required>
+            </label>
+            <label>
+              <span>Företagsnamn</span>
+              <input id="settingsCompanyName" name="companyName" type="text" required>
+            </label>
+            <label>
+              <span>Rubrik för leveranser</span>
+              <input id="settingsDeliveryTitle" name="deliveryTitle" type="text" required>
+            </label>
+            <label>
+              <span>Support e-post</span>
+              <input id="settingsSupportEmail" name="supportEmail" type="email" placeholder="support@stuckbema.se">
+            </label>
+            <label>
+              <span>Support telefon</span>
+              <input id="settingsSupportPhone" name="supportPhone" type="tel" inputmode="tel">
+            </label>
+            <label>
+              <span>Orderprefix</span>
+              <input id="settingsOrderPrefix" name="orderNumberPrefix" type="text" maxlength="12">
+            </label>
+            <label class="admin-checkbox">
+              <input id="settingsAllowPush" name="allowPushNotifications" type="checkbox">
+              <span>Tillåt push-notiser i systemet</span>
+            </label>
+            <label class="admin-span-all">
+              <span>Adminmeddelande</span>
+              <textarea id="settingsAdminMessage" name="adminMessage" rows="3" placeholder="Internt meddelande till administratörer"></textarea>
+            </label>
+            <button id="adminSettingsSaveBtn" class="primary" type="submit">Spara inställningar</button>
+          </form>
+        </section>
+
+        <section class="admin-card admin-span-all" id="adminUsersSection">
+          <div class="admin-card-head">
+            <div>
+              <h3>Användare och behörigheter</h3>
+              <p>Lägg till, ändra roll eller ta bort användare. Ägare skyddas från manager-ändringar.</p>
+            </div>
+          </div>
+
+          <form id="adminUserForm" class="admin-form user-form">
+            <input id="adminUserId" type="hidden">
+            <label>
+              <span>Förnamn</span>
+              <input id="adminFirstName" name="firstName" type="text" required>
+            </label>
+            <label>
+              <span>Efternamn</span>
+              <input id="adminLastName" name="lastName" type="text" required>
+            </label>
+            <label>
+              <span>E-post</span>
+              <input id="adminEmail" name="email" type="email" required>
+            </label>
+            <label>
+              <span>Telefon</span>
+              <input id="adminPhone" name="phone" type="tel" inputmode="tel">
+            </label>
+            <label>
+              <span>Roll</span>
+              <select id="adminRole" name="role" required></select>
+            </label>
+            <label class="admin-checkbox">
+              <input id="adminActive" name="active" type="checkbox" checked>
+              <span>Aktiv användare</span>
+            </label>
+            <label>
+              <span>Nytt lösenord</span>
+              <input id="adminPassword" name="password" type="password" minlength="8" autocomplete="new-password" placeholder="Minst 8 tecken vid lösenordsbyte">
+            </label>
+            <div class="admin-form-actions">
+              <button id="adminUserSaveBtn" class="primary" type="submit">Lägg till användare</button>
+              <button id="adminUserCancelBtn" class="ghost" type="button" hidden>Avbryt ändring</button>
+            </div>
+          </form>
+
+          <div id="adminTempPassword" class="admin-temp-password" hidden></div>
+          <div id="adminUsersList" class="admin-users-list"></div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <template id="itemRowTemplate">
+    <div class="item-row" data-testid="article-row">
+      <div class="item-fields">
+        <label class="item-field qty-field">
+          <span>Antal</span>
+          <input type="text" class="item-antal" placeholder="t.ex. 25" required>
+        </label>
+        <label class="item-field name-field">
+          <span>Artikel</span>
+          <input type="text" class="item-artikel" placeholder="t.ex. 25 kg säckar" required>
+        </label>
+        <label class="item-field work-order-field">
+          <span>Arbetsorder nummer</span>
+          <input type="text" class="item-work-order" list="workOrderSuggestions" inputmode="numeric" placeholder="t.ex. 10245">
+        </label>
+      </div>
+      <button type="button" class="remove-item-btn" title="Ta bort artikelrad" aria-label="Ta bort artikelrad">Ta bort</button>
+    </div>
+  </template>
+
+  <template id="deliveryCardTemplate">
+    <article class="delivery-card">
+      <div class="card-header">
+        <div class="card-header-main">
+          <div class="status-badge" data-field="status"></div>
+          <div class="card-summary" data-field="summary"></div>
+        </div>
+        <div class="card-actions">
+          <button class="card-btn edit-btn" type="button" data-action="edit">Ändra</button>
+          <button class="card-btn start-btn" type="button" data-action="start">Starta leverans</button>
+          <button class="card-btn map-btn" type="button" data-action="map">Visa livekarta</button>
+          <button class="card-btn resend-btn" type="button" data-action="resend">Skicka spårningslänk igen</button>
+          <button class="card-btn deliver-btn" type="button" data-action="deliver">Leverera</button>
+          <button class="card-btn delete-btn" type="button" data-action="delete">Radera</button>
+        </div>
+      </div>
+
+      <div class="status-track" data-field="track"></div>
+
+      <div class="card-body">
+        <div class="delivery-info">
+          <h3 data-field="mottagare"></h3>
+          <p class="address-text" data-field="adress"></p>
+          <p class="phone-text" data-field="tele"></p>
+          <p class="delivery-window" data-field="deliveryWindow"></p>
+          <div class="address-actions">
+            <a href="#" class="mini-link map-link" target="_blank" rel="noopener noreferrer">Maps</a>
+            <a href="#" class="mini-link call-link">Ring</a>
+            <a href="#" class="mini-link sms-link">SMS</a>
+          </div>
+          <p class="ovrigt-text" data-field="ovrigt"></p>
+          <p class="internal-comment-text" data-field="internalComment"></p>
+          <p class="tracking-text" data-field="tracking"></p>
+        </div>
+
+        <div class="card-items">
+          <h4>Artiklar</h4>
+          <ul class="items-list" data-field="items"></ul>
+        </div>
+      </div>
+
+      <div class="card-footer">
+        <div class="date-info" data-field="dates"></div>
+        <div class="note-info" data-field="note"></div>
+      </div>
+    </article>
+  </template>
+
+  <script src="core.js?v=20260506-01"></script>
+  <script src="config.js?v=20260505-01"></script>
+  <script src="environment.js?v=20260505-01"></script>
+  <script src="auth.js?v=20260505-01"></script>
+  <script src="push.js?v=20260505-01"></script>
+  <script src="admin.js?v=20260505-01"></script>
+  <script src="search/fieldAutocomplete.js?v=20260505-01"></script>
+  <script src="app.js?v=20260505-01"></script>
+</body>
+</html>
