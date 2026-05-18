@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
+use Throwable;
 
 class WebPushNotifier
 {
@@ -43,7 +45,7 @@ class WebPushNotifier
     public function sendToAdmins(array $message): array
     {
         $userIds = DB::table('users')
-            ->whereIn('role', ['owner', 'manager', 'admin'])
+            ->whereIn('role', ['owner', 'firmatecknare', 'manager', 'arbetsledare', 'admin'])
             ->where('active', true)
             ->pluck('id')
             ->all();
@@ -57,17 +59,23 @@ class WebPushNotifier
             return ['sent' => 0, 'failed' => 0, 'expired' => 0];
         }
 
-        $payload = json_encode($message, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
-        $webPush = new WebPush([
-            'VAPID' => [
-                'subject' => env('VAPID_SUBJECT', 'mailto:no-reply@example.test'),
-                'publicKey' => env('VAPID_PUBLIC_KEY'),
-                'privateKey' => env('VAPID_PRIVATE_KEY'),
-            ],
-        ], [
-            'TTL' => 3600,
-            'urgency' => 'normal',
-        ]);
+        try {
+            $payload = json_encode($message, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+            $webPush = new WebPush([
+                'VAPID' => [
+                    'subject' => env('VAPID_SUBJECT', 'mailto:no-reply@example.test'),
+                    'publicKey' => env('VAPID_PUBLIC_KEY'),
+                    'privateKey' => env('VAPID_PRIVATE_KEY'),
+                ],
+            ], [
+                'TTL' => 3600,
+                'urgency' => 'normal',
+            ]);
+        } catch (Throwable $exception) {
+            Log::warning('Web Push kunde inte initieras.', ['message' => $exception->getMessage()]);
+
+            return ['sent' => 0, 'failed' => 0, 'expired' => 0];
+        }
 
         $byEndpoint = [];
         foreach ($subscriptions as $subscription) {
@@ -87,34 +95,40 @@ class WebPushNotifier
         }
 
         $result = ['sent' => 0, 'failed' => 0, 'expired' => 0];
-        foreach ($webPush->flush() as $report) {
-            $endpoint = $report->getEndpoint();
-            $subscription = $byEndpoint[$endpoint] ?? null;
+        try {
+            foreach ($webPush->flush() as $report) {
+                $endpoint = $report->getEndpoint();
+                $subscription = $byEndpoint[$endpoint] ?? null;
 
-            if ($report->isSuccess()) {
-                $result['sent']++;
+                if ($report->isSuccess()) {
+                    $result['sent']++;
+                    DB::table('push_subscriptions')->where('endpoint', $endpoint)->update([
+                        'failure_count' => 0,
+                        'last_success_at' => now(),
+                        'last_seen_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    continue;
+                }
+
+                $result['failed']++;
+                $expired = $report->isSubscriptionExpired();
+                if ($expired) {
+                    $result['expired']++;
+                }
+
                 DB::table('push_subscriptions')->where('endpoint', $endpoint)->update([
-                    'failure_count' => 0,
-                    'last_success_at' => now(),
-                    'last_seen_at' => now(),
+                    'enabled' => ! $expired,
+                    'failure_count' => (int) ($subscription?->failure_count ?? 0) + 1,
+                    'last_failure_at' => now(),
+                    'revoked_at' => $expired ? now() : null,
                     'updated_at' => now(),
                 ]);
-                continue;
             }
+        } catch (Throwable $exception) {
+            Log::warning('Web Push kunde inte skickas.', ['message' => $exception->getMessage()]);
 
-            $result['failed']++;
-            $expired = $report->isSubscriptionExpired();
-            if ($expired) {
-                $result['expired']++;
-            }
-
-            DB::table('push_subscriptions')->where('endpoint', $endpoint)->update([
-                'enabled' => ! $expired,
-                'failure_count' => (int) ($subscription?->failure_count ?? 0) + 1,
-                'last_failure_at' => now(),
-                'revoked_at' => $expired ? now() : null,
-                'updated_at' => now(),
-            ]);
+            return ['sent' => $result['sent'], 'failed' => count($byEndpoint), 'expired' => $result['expired']];
         }
 
         return $result;

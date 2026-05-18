@@ -417,7 +417,7 @@ class InternalAppController extends Controller
             'firstName' => ['required', 'string', 'max:120'],
             'lastName' => ['nullable', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:80'],
-            'role' => ['required', Rule::in($this->roles)],
+            'role' => ['required', Rule::in($this->allowedRoleInputs())],
             'active' => ['boolean'],
         ]);
 
@@ -454,7 +454,7 @@ class InternalAppController extends Controller
             'firstName' => ['required', 'string', 'max:120'],
             'lastName' => ['nullable', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:80'],
-            'role' => ['required', Rule::in($this->roles)],
+            'role' => ['required', Rule::in($this->allowedRoleInputs())],
             'active' => ['boolean'],
         ]);
 
@@ -570,10 +570,11 @@ class InternalAppController extends Controller
             'orders' => $orders,
             'users' => $users,
             'drivers' => $drivers,
+            'recipients' => $this->recipientRows(),
             'settings' => $settings,
             'roles' => $this->roleOptions(),
             'permissions' => $this->permissionsFor($user->role),
-            'admin' => $this->adminPanelData($orders, $users, $drivers),
+            'admin' => $this->adminPanelData($orders, $users, $drivers, $user),
             'push' => [
                 'enabled' => (bool) ($settings['allowPushNotifications'] && env('VAPID_PUBLIC_KEY') && env('VAPID_PRIVATE_KEY')),
                 'publicKey' => env('VAPID_PUBLIC_KEY'),
@@ -592,6 +593,559 @@ class InternalAppController extends Controller
                 'roleCounts' => $roleCounts,
             ],
         ];
+    }
+
+    private function roleOptions(): array
+    {
+        return collect($this->roles)
+            ->map(fn (string $role) => [
+                'label' => $this->roleLabels[$role],
+                'value' => $role,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function allowedRoleInputs(): array
+    {
+        return array_values(array_unique([...$this->roles, ...array_keys($this->roleAliases)]));
+    }
+
+    private function normalizedRole(?string $role): string
+    {
+        $key = Str::of((string) $role)->lower()->ascii()->replace(' ', '_')->toString();
+
+        return $this->roleAliases[$key] ?? (in_array($key, $this->roles, true) ? $key : 'viewer');
+    }
+
+    private function roleLabel(?string $role): string
+    {
+        return $this->roleLabels[$this->normalizedRole($role)] ?? (string) $role;
+    }
+
+    private function allPermissions(): array
+    {
+        return [
+            'users.view',
+            'users.create',
+            'users.update',
+            'users.delete',
+            'users.change_password',
+            'users.change_role',
+            'roles.view',
+            'roles.update',
+            'deliveries.view_all',
+            'deliveries.view_own',
+            'deliveries.create',
+            'deliveries.update',
+            'deliveries.delete',
+            'deliveries.assign_driver',
+            'deliveries.update_status',
+            'drivers.view',
+            'drivers.create',
+            'drivers.update',
+            'drivers.delete',
+            'customers.view',
+            'customers.create',
+            'customers.update',
+            'customers.delete',
+            'articles.view',
+            'articles.create',
+            'articles.update',
+            'articles.delete',
+            'work_orders.view',
+            'work_orders.create',
+            'work_orders.update',
+            'work_orders.delete',
+            'tracking.view',
+            'tracking.create',
+            'tracking.update',
+            'tracking.send',
+            'settings.view',
+            'settings.update',
+            'logs.view',
+            'logs.export',
+            'logs.security_view',
+            'system.view_status',
+            'system.manage_api',
+            'system.full_access',
+        ];
+    }
+
+    private function permissionMatrix(): array
+    {
+        return [
+            'admin' => [
+                'users.view',
+                'users.create',
+                'users.update',
+                'users.delete',
+                'users.change_password',
+                'users.change_role',
+                'roles.view',
+                'roles.update',
+                'deliveries.view_all',
+                'deliveries.create',
+                'deliveries.update',
+                'deliveries.delete',
+                'deliveries.assign_driver',
+                'deliveries.update_status',
+                'drivers.view',
+                'drivers.create',
+                'drivers.update',
+                'drivers.delete',
+                'customers.view',
+                'customers.create',
+                'customers.update',
+                'customers.delete',
+                'articles.view',
+                'articles.create',
+                'articles.update',
+                'articles.delete',
+                'work_orders.view',
+                'work_orders.create',
+                'work_orders.update',
+                'work_orders.delete',
+                'tracking.view',
+                'tracking.create',
+                'tracking.update',
+                'tracking.send',
+                'settings.view',
+                'settings.update',
+                'logs.view',
+                'logs.export',
+                'system.view_status',
+                'system.manage_api',
+            ],
+            'arbetsledare' => [
+                'deliveries.view_all',
+                'deliveries.create',
+                'deliveries.update',
+                'deliveries.assign_driver',
+                'deliveries.update_status',
+                'drivers.view',
+                'customers.view',
+                'customers.create',
+                'customers.update',
+                'articles.view',
+                'articles.create',
+                'articles.update',
+                'work_orders.view',
+                'work_orders.create',
+                'work_orders.update',
+                'tracking.view',
+                'tracking.create',
+                'tracking.send',
+                'logs.view',
+            ],
+            'personal' => [
+                'deliveries.view_all',
+                'deliveries.create',
+                'deliveries.update',
+                'customers.view',
+                'customers.create',
+                'customers.update',
+                'articles.view',
+                'work_orders.view',
+                'work_orders.create',
+                'tracking.view',
+            ],
+            'support' => [
+                'users.view',
+                'deliveries.view_all',
+                'drivers.view',
+                'customers.view',
+                'articles.view',
+                'work_orders.view',
+                'tracking.view',
+                'logs.view',
+                'system.view_status',
+            ],
+            'forare' => [
+                'deliveries.view_own',
+                'deliveries.update_status',
+                'tracking.view',
+            ],
+            'viewer' => [
+                'deliveries.view_all',
+                'customers.view',
+                'articles.view',
+                'work_orders.view',
+                'tracking.view',
+            ],
+            'kund' => [
+                'tracking.view',
+            ],
+        ];
+    }
+
+    private function permissionsFor(?string $role): array
+    {
+        $normalized = $this->normalizedRole($role);
+        $permissions = array_fill_keys($this->allPermissions(), false);
+
+        if ($normalized === 'firmatecknare') {
+            return array_fill_keys($this->allPermissions(), true);
+        }
+
+        foreach ($this->permissionMatrix()[$normalized] ?? [] as $permission) {
+            $permissions[$permission] = true;
+        }
+
+        return $permissions;
+    }
+
+    private function roleMatrix(): array
+    {
+        return collect($this->roles)
+            ->map(function (string $role, int $index) {
+                $permissions = $this->permissionsFor($role);
+
+                return [
+                    'role' => $role,
+                    'label' => $this->roleLabels[$role],
+                    'description' => $this->roleDescriptions[$role],
+                    'level' => $index + 1,
+                    'permissions' => $permissions,
+                    'allowedPermissions' => array_values(array_filter(
+                        array_keys($permissions),
+                        fn (string $permission) => $permissions[$permission]
+                    )),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function hasPermission(object $user, string $permission): bool
+    {
+        $permissions = $this->permissionsFor($user->role);
+
+        return (bool) ($permissions['system.full_access'] ?? false) || (bool) ($permissions[$permission] ?? false);
+    }
+
+    private function requirePermission(Request $request, string $permission): object
+    {
+        $user = $this->requireUser($request);
+        abort_unless($this->hasPermission($user, $permission), 403);
+
+        return $user;
+    }
+
+    private function guardUserMutation(object $actor, object $target, ?string $newRole = null): void
+    {
+        $actorIsFirmatecknare = $this->hasPermission($actor, 'system.full_access');
+        $targetIsFirmatecknare = $this->normalizedRole($target->role) === 'firmatecknare';
+        $newRoleIsFirmatecknare = $newRole === 'firmatecknare';
+
+        abort_if(($targetIsFirmatecknare || $newRoleIsFirmatecknare) && ! $actorIsFirmatecknare, 403);
+    }
+
+    private function adminPanelData($orders, $users, $drivers, object $user): array
+    {
+        return [
+            'roleMatrix' => $this->hasPermission($user, 'roles.view') ? $this->roleMatrix() : [],
+            'logs' => $this->hasPermission($user, 'logs.view') ? $this->logRows() : [],
+            'workOrders' => $this->hasPermission($user, 'work_orders.view') ? $this->workOrderRows() : [],
+            'articles' => $this->hasPermission($user, 'articles.view') ? $this->articleRows() : [],
+            'customers' => $this->hasPermission($user, 'customers.view') ? $this->customerRows() : [],
+            'drivers' => $this->hasPermission($user, 'drivers.view') ? $drivers : [],
+            'trackingLinks' => $this->hasPermission($user, 'tracking.view') ? $this->trackingLinkRows() : [],
+            'pushSubscriptions' => $this->hasPermission($user, 'settings.view') ? $this->pushSubscriptionRows() : [],
+            'systemStatus' => $this->hasPermission($user, 'system.view_status') ? $this->systemStatus($orders, $users) : [],
+            'apiEndpoints' => $this->hasPermission($user, 'system.view_status') ? $this->apiEndpoints() : [],
+        ];
+    }
+
+    private function workOrderRows(): array
+    {
+        return DB::table('external_work_orders')
+            ->orderByDesc('updated_at')
+            ->limit(200)
+            ->get()
+            ->map(fn ($row) => [
+                'workOrderNumber' => $row->work_order_number,
+                'source' => $row->source,
+                'recipientName' => $row->recipient_name,
+                'recipientPhone' => $row->recipient_phone,
+                'deliveryAddress' => $row->delivery_address,
+                'status' => $row->status,
+                'receivedAt' => $row->received_at,
+                'createdAt' => $row->created_at,
+                'updatedAt' => $row->updated_at,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function articleRows(): array
+    {
+        return DB::table('order_items')
+            ->select('artikel', DB::raw('count(*) as usage_count'), DB::raw('max(updated_at) as updated_at'))
+            ->whereNotNull('artikel')
+            ->where('artikel', '<>', '')
+            ->groupBy('artikel')
+            ->orderBy('artikel')
+            ->limit(200)
+            ->get()
+            ->map(fn ($row) => [
+                'artikel' => $row->artikel,
+                'usageCount' => (int) $row->usage_count,
+                'updatedAt' => $row->updated_at,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function customerRows(): array
+    {
+        return DB::table('orders')
+            ->select('mottagare', 'tele', 'adress', DB::raw('count(*) as orders_count'), DB::raw('max(updated_at) as last_order_at'))
+            ->whereNotNull('mottagare')
+            ->groupBy('mottagare', 'tele', 'adress')
+            ->orderByDesc('last_order_at')
+            ->limit(200)
+            ->get()
+            ->map(fn ($row) => [
+                'name' => $row->mottagare,
+                'phone' => $row->tele,
+                'address' => $row->adress,
+                'ordersCount' => (int) $row->orders_count,
+                'lastOrderAt' => $row->last_order_at,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function recipientRows(?string $query = null): array
+    {
+        $addressByName = DB::table('orders')
+            ->whereNotNull('mottagare')
+            ->where('mottagare', '<>', '')
+            ->whereNotNull('adress')
+            ->where('adress', '<>', '')
+            ->orderByDesc('updated_at')
+            ->limit(1000)
+            ->get(['mottagare', 'adress'])
+            ->reduce(function (array $carry, object $row) {
+                $key = $this->recipientKey($row->mottagare);
+                if ($key !== '' && ! isset($carry[$key])) {
+                    $carry[$key] = $row->adress;
+                }
+
+                return $carry;
+            }, []);
+
+        $rows = collect();
+
+        DB::table('users')
+            ->where('active', true)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get(['id', 'first_name', 'last_name', 'phone', 'email', 'role', 'updated_at'])
+            ->each(function (object $user) use ($rows, $addressByName) {
+                $name = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
+                $key = $this->recipientKey($name);
+                if (! $this->isValidRecipientName($name)) {
+                    return;
+                }
+
+                $rows->push([
+                    'id' => $user->id,
+                    'type' => 'user',
+                    'name' => $name,
+                    'value' => $name,
+                    'phone' => $user->phone,
+                    'email' => $user->email,
+                    'address' => $addressByName[$key] ?? null,
+                    'source' => 'användare',
+                    'sourceLabel' => $this->roleLabel($user->role),
+                    'updatedAt' => $user->updated_at,
+                ]);
+            });
+
+        DB::table('people')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'phone', 'email', 'role', 'source', 'updated_at'])
+            ->each(function (object $person) use ($rows, $addressByName) {
+                $name = trim((string) $person->name);
+                $key = $this->recipientKey($name);
+                if (! $this->isValidRecipientName($name)) {
+                    return;
+                }
+
+                $rows->push([
+                    'id' => $person->id,
+                    'type' => 'person',
+                    'name' => $name,
+                    'value' => $name,
+                    'phone' => $person->phone,
+                    'email' => $person->email,
+                    'address' => $addressByName[$key] ?? null,
+                    'source' => $person->source ?: 'person',
+                    'sourceLabel' => $person->role ? $this->roleLabel($person->role) : 'Mottagare',
+                    'updatedAt' => $person->updated_at,
+                ]);
+            });
+
+        $queryKey = $this->recipientKey($query);
+
+        $deduplicated = $rows
+            ->filter(function (array $row) use ($queryKey) {
+                if ($queryKey === '') {
+                    return true;
+                }
+
+                return str_contains($this->recipientKey($row['name']), $queryKey);
+            })
+            ->reduce(function (array $carry, array $row) {
+                $key = $this->recipientKey($row['name']);
+                $existing = $carry[$key] ?? null;
+
+                if (! $existing || (! $existing['phone'] && $row['phone']) || ($row['type'] === 'person' && $existing['type'] !== 'person')) {
+                    $carry[$key] = $row;
+                }
+
+                return $carry;
+            }, []);
+
+        return collect($deduplicated)
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    private function recipientKey(?string $value): string
+    {
+        return Str::of((string) $value)->squish()->lower()->ascii()->toString();
+    }
+
+    private function isValidRecipientName(?string $name): bool
+    {
+        $clean = Str::of((string) $name)->squish()->toString();
+        if (strlen($clean) < 2 || filter_var($clean, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        $ascii = Str::of($clean)->lower()->ascii()->toString();
+        if (in_array($ascii, ['anvandare', 'user', 'unknown', 'okand'], true)) {
+            return false;
+        }
+
+        return ! preg_match('/\b(test|codex|example|demo)\b/i', $ascii);
+    }
+
+    private function trackingLinkRows(): array
+    {
+        return DB::table('tracking_links')
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get()
+            ->map(fn ($row) => [
+                'token' => $row->token,
+                'orderId' => $row->order_id,
+                'active' => (bool) $row->active,
+                'expiresAt' => $row->expires_at,
+                'createdAt' => $row->created_at,
+                'updatedAt' => $row->updated_at,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function pushSubscriptionRows(): array
+    {
+        return DB::table('push_subscriptions')
+            ->leftJoin('users', 'users.id', '=', 'push_subscriptions.user_id')
+            ->orderByDesc('push_subscriptions.updated_at')
+            ->limit(100)
+            ->get([
+                'push_subscriptions.*',
+                'users.email as user_email',
+                'users.first_name as user_first_name',
+                'users.last_name as user_last_name',
+            ])
+            ->map(fn ($row) => [
+                'id' => $row->id,
+                'user' => trim(($row->user_first_name ?? '').' '.($row->user_last_name ?? '')) ?: $row->user_email,
+                'platform' => $row->platform,
+                'provider' => $row->provider,
+                'permission' => $row->permission,
+                'enabled' => (bool) $row->enabled,
+                'failureCount' => (int) $row->failure_count,
+                'lastSeenAt' => $row->last_seen_at,
+                'updatedAt' => $row->updated_at,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function systemStatus($orders, $users): array
+    {
+        return [
+            'environment' => app()->environment(),
+            'laravelVersion' => app()->version(),
+            'phpVersion' => PHP_VERSION,
+            'database' => config('database.default'),
+            'broadcasting' => config('broadcasting.default'),
+            'queue' => config('queue.default'),
+            'ordersTotal' => $orders->count(),
+            'usersTotal' => $users->count(),
+            'activeUsers' => $users->where('active', true)->count(),
+        ];
+    }
+
+    private function apiEndpoints(): array
+    {
+        return [
+            ['method' => 'GET', 'path' => '/api/orders', 'module' => 'Leveranser', 'status' => 'Aktiv'],
+            ['method' => 'POST', 'path' => '/api/orders', 'module' => 'Leveranser', 'status' => 'Aktiv'],
+            ['method' => 'PUT', 'path' => '/api/orders/{id}', 'module' => 'Leveranser', 'status' => 'Aktiv'],
+            ['method' => 'DELETE', 'path' => '/api/orders/{id}', 'module' => 'Leveranser', 'status' => 'Aktiv'],
+            ['method' => 'POST', 'path' => '/api/orders/{id}/location', 'module' => 'Tracking', 'status' => 'Aktiv'],
+            ['method' => 'POST', 'path' => '/api/external/work-orders', 'module' => 'Arbetsordrar', 'status' => 'Aktiv'],
+            ['method' => 'POST', 'path' => '/users', 'module' => 'Användare', 'status' => 'Aktiv'],
+            ['method' => 'PUT', 'path' => '/users/{id}', 'module' => 'Användare', 'status' => 'Aktiv'],
+            ['method' => 'PATCH', 'path' => '/users/{id}/password', 'module' => 'Användare', 'status' => 'Aktiv'],
+            ['method' => 'DELETE', 'path' => '/users/{id}', 'module' => 'Användare', 'status' => 'Aktiv'],
+            ['method' => 'PUT', 'path' => '/settings', 'module' => 'Inställningar', 'status' => 'Aktiv'],
+            ['method' => 'POST', 'path' => '/push/subscription', 'module' => 'Pushnotiser', 'status' => 'Aktiv'],
+        ];
+    }
+
+    private function logRows(): array
+    {
+        $path = storage_path('logs/laravel.log');
+        if (! is_file($path)) {
+            return [];
+        }
+
+        $lines = array_slice(file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [], -600);
+        $rows = [];
+
+        foreach (array_reverse($lines) as $line) {
+            if (preg_match('/^\[(?<time>.+?)\]\s+(?<env>[^.]+)\.(?<level>[^:]+):\s+(?<message>.*)$/', $line, $matches)) {
+                $rows[] = [
+                    'time' => $matches['time'],
+                    'user' => 'System',
+                    'role' => 'system',
+                    'event' => Str::limit($matches['message'], 140, ''),
+                    'module' => 'Laravel',
+                    'ip' => '-',
+                    'status' => strtolower($matches['level']),
+                    'details' => Str::limit($line, 1000, ''),
+                ];
+            } elseif ($rows) {
+                $rows[array_key_last($rows)]['details'] = Str::limit($rows[array_key_last($rows)]['details']."\n".$line, 1600, '');
+            }
+
+            if (count($rows) >= 200) {
+                break;
+            }
+        }
+
+        return $rows;
     }
 
     private function activeUser(Request $request): ?object
@@ -715,14 +1269,11 @@ class InternalAppController extends Controller
             'adress' => $row->adress,
             'tele' => $row->tele,
             'mottagare' => $row->mottagare,
-            'recipientEmail' => $row->recipient_email,
             'desiredDeliveryDate' => $row->desired_delivery_date,
             'desiredDeliveryTime' => $row->desired_delivery_time ? substr((string) $row->desired_delivery_time, 0, 5) : null,
-            'assignedDriverId' => $row->assigned_driver_id,
             'driverId' => $row->driver_id,
             'driverName' => $row->driver_name ?: $row->assigned_driver_id,
             'status' => $status,
-            'priority' => $row->priority,
             'notes' => $row->notes,
             'internalComment' => $row->internal_comment,
             'items' => $items,

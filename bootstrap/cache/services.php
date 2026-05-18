@@ -30,8 +30,7 @@
     26 => 'Laravel\\Tinker\\TinkerServiceProvider',
     27 => 'Livewire\\LivewireServiceProvider',
     28 => 'Carbon\\Laravel\\ServiceProvider',
-    29 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
-    30 => 'Termwind\\Laravel\\TermwindServiceProvider',
+    29 => 'Termwind\\Laravel\\TermwindServiceProvider',
   ),
   'eager' => 
   array (
@@ -49,8 +48,7 @@
     11 => 'Laravel\\Reverb\\ReverbServiceProvider',
     12 => 'Livewire\\LivewireServiceProvider',
     13 => 'Carbon\\Laravel\\ServiceProvider',
-    14 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
-    15 => 'Termwind\\Laravel\\TermwindServiceProvider',
+    14 => 'Termwind\\Laravel\\TermwindServiceProvider',
   ),
   'deferred' => 
   array (

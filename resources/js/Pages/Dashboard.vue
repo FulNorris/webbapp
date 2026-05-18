@@ -7,6 +7,7 @@ const props = defineProps({
   orders: { type: Array, default: () => [] },
   users: { type: Array, default: () => [] },
   drivers: { type: Array, default: () => [] },
+  recipients: { type: Array, default: () => [] },
   settings: { type: Object, required: true },
   roles: { type: Array, default: () => [] },
   permissions: { type: Object, default: () => ({}) },
@@ -41,6 +42,8 @@ const tempPasswordVisible = ref(false);
 const logSearch = ref('');
 const logStatus = ref('');
 const logModule = ref('');
+const recipientAutocompleteOpen = ref(false);
+const recipientAutocompleteRef = ref(null);
 const pushState = ref({
   enabled: false,
   supported: false,
@@ -76,27 +79,28 @@ const canOpenAdmin = computed(() => ['users.view', 'settings.view', 'logs.view',
 const recipientSuggestions = computed(() => {
   const suggestions = new Map();
 
-  props.users.forEach((user) => {
-    const name = (user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim()).trim();
-    if (!name) return;
-    suggestions.set(normalizeKey(name), {
-      value: name,
-      phone: user.phone || '',
-      source: user.roleLabel || user.role || 'användare',
-    });
-  });
-
-  props.orders.forEach((order) => {
-    const name = (order.mottagare || '').trim();
+  props.recipients.forEach((recipient) => {
+    const name = String(recipient.name || recipient.value || '').trim();
     if (!name || suggestions.has(normalizeKey(name))) return;
     suggestions.set(normalizeKey(name), {
+      id: recipient.id || name,
+      name,
       value: name,
-      phone: order.tele || '',
-      source: 'tidigare leverans',
+      phone: recipient.phone || '',
+      address: recipient.address || '',
+      source: recipient.sourceLabel || recipient.source || 'system',
     });
   });
 
   return Array.from(suggestions.values()).sort((a, b) => a.value.localeCompare(b.value, 'sv'));
+});
+const visibleRecipientSuggestions = computed(() => {
+  const query = normalizeKey(orderForm.mottagare);
+  if (!query) return [];
+
+  return recipientSuggestions.value
+    .filter((suggestion) => normalizeKey(suggestion.value).startsWith(query) || normalizeKey(suggestion.value).includes(query))
+    .slice(0, 10);
 });
 const addressSuggestions = computed(() => {
   const suggestions = new Map();
@@ -155,10 +159,12 @@ const settingsForm = useForm({
 
 onMounted(() => {
   syncPushState();
+  document.addEventListener('pointerdown', handleDocumentPointerDown);
 });
 
 onBeforeUnmount(() => {
   stopLocationWatch();
+  document.removeEventListener('pointerdown', handleDocumentPointerDown);
 });
 
 function pushSupported() {
@@ -214,9 +220,36 @@ function applyRecipientSuggestion() {
   const match = recipientSuggestions.value.find((suggestion) => normalizeKey(suggestion.value) === normalizeKey(orderForm.mottagare));
   if (!match) return;
 
-  if (match.phone) {
-    orderForm.tele = match.phone;
+  if (!orderForm.tele && match.phone) orderForm.tele = match.phone;
+}
+
+function handleRecipientInput() {
+  recipientAutocompleteOpen.value = String(orderForm.mottagare || '').trim().length > 0;
+}
+
+function handleRecipientFocus() {
+  recipientAutocompleteOpen.value = String(orderForm.mottagare || '').trim().length > 0;
+}
+
+function handleRecipientBlur() {
+  window.setTimeout(() => {
+    applyRecipientSuggestion();
+    recipientAutocompleteOpen.value = false;
+  }, 140);
+}
+
+function selectRecipientSuggestion(suggestion) {
+  orderForm.mottagare = suggestion.value;
+  orderForm.tele = suggestion.phone || '';
+  if (suggestion.address && !orderForm.adress) {
+    orderForm.adress = suggestion.address;
   }
+  recipientAutocompleteOpen.value = false;
+}
+
+function handleDocumentPointerDown(event) {
+  if (!recipientAutocompleteRef.value || recipientAutocompleteRef.value.contains(event.target)) return;
+  recipientAutocompleteOpen.value = false;
 }
 
 function can(permission) {
@@ -228,7 +261,14 @@ function roleLabel(user) {
 }
 
 function openNativePicker(event) {
-  event?.target?.showPicker?.();
+  const input = event?.currentTarget?.querySelector?.('input') || event?.target;
+  input?.focus?.();
+
+  try {
+    input?.showPicker?.();
+  } catch {
+    // Some browsers only allow showPicker during direct pointer interaction.
+  }
 }
 
 function cleanPhone(value) {
@@ -824,22 +864,36 @@ function formatDate(value) {
       <form class="form-grid" @submit.prevent="saveOrder">
         <div class="field">
           <label for="mottagare">Mottagare</label>
-          <InputText
-            id="mottagare"
-            v-model="orderForm.mottagare"
-            list="recipient-suggestions"
-            autocomplete="off"
-            @change="applyRecipientSuggestion"
-            @blur="applyRecipientSuggestion"
-          />
-          <datalist id="recipient-suggestions">
-            <option
-              v-for="suggestion in recipientSuggestions"
-              :key="suggestion.value"
-              :value="suggestion.value"
-              :label="[suggestion.phone, suggestion.source].filter(Boolean).join(' · ')"
+          <div ref="recipientAutocompleteRef" class="autocomplete-field">
+            <InputText
+              id="mottagare"
+              v-model="orderForm.mottagare"
+              autocomplete="off"
+              aria-autocomplete="list"
+              :aria-expanded="recipientAutocompleteOpen && visibleRecipientSuggestions.length > 0"
+              @input="handleRecipientInput"
+              @focus="handleRecipientFocus"
+              @blur="handleRecipientBlur"
             />
-          </datalist>
+            <div
+              v-if="recipientAutocompleteOpen && visibleRecipientSuggestions.length"
+              class="autocomplete-panel"
+              role="listbox"
+            >
+              <button
+                v-for="suggestion in visibleRecipientSuggestions"
+                :key="suggestion.id"
+                type="button"
+                class="autocomplete-option"
+                role="option"
+                @mousedown.prevent="selectRecipientSuggestion(suggestion)"
+                @touchstart.prevent="selectRecipientSuggestion(suggestion)"
+              >
+                <span>{{ suggestion.value }}</span>
+                <small>{{ [suggestion.phone, suggestion.source].filter(Boolean).join(' · ') }}</small>
+              </button>
+            </div>
+          </div>
           <span v-if="orderForm.errors.mottagare" class="field-error">{{ orderForm.errors.mottagare }}</span>
         </div>
         <div class="field">
@@ -866,28 +920,24 @@ function formatDate(value) {
         </div>
         <div class="field">
           <label for="desiredDeliveryDate">Datum</label>
-          <div class="input-with-icon">
+          <div class="input-with-icon" @click="openNativePicker">
             <InputText
               id="desiredDeliveryDate"
               v-model="orderForm.desiredDeliveryDate"
               type="date"
               class="picker-input"
-              @click="openNativePicker"
-              @focus="openNativePicker"
             />
             <i class="pi pi-calendar picker-icon"></i>
           </div>
         </div>
         <div class="field">
           <label for="desiredDeliveryTime">Tid</label>
-          <div class="input-with-icon">
+          <div class="input-with-icon" @click="openNativePicker">
             <InputText
               id="desiredDeliveryTime"
               v-model="orderForm.desiredDeliveryTime"
               type="time"
               class="picker-input"
-              @click="openNativePicker"
-              @focus="openNativePicker"
             />
             <i class="pi pi-clock picker-icon"></i>
           </div>

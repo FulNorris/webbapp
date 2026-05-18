@@ -48,6 +48,85 @@ Byt lösenord direkt efter första inloggning.
 7. Kör `stuckbema-reverb.service` eller motsvarande process för `php artisan reverb:start`.
 8. Aktivera HTTPS/Cloudflare för geolocation, service worker, WebSockets och push.
 
+### Serverkrav
+
+Installera PHP-tilläggen som används i produktion:
+
+```bash
+sudo apt update
+sudo apt install php-gmp php-bcmath -y
+sudo systemctl restart php*-fpm
+sudo systemctl reload nginx
+php -m | grep -E "gmp|bcmath"
+```
+
+`php-gmp` eller `php-bcmath` krävs av Web Push-krypteringen. Appen ska inte krascha om de saknas, men push blir långsammare eller kan misslyckas beroende på servermiljö.
+
+### Broadcasting och Reverb
+
+Standard i `.env.example` är:
+
+```dotenv
+BROADCAST_CONNECTION=log
+```
+
+Det gör att Laravel inte försöker starta Reverb/Pusher utan nycklar. Om livekarta/WebSockets ska köras aktivt, sätt:
+
+```dotenv
+BROADCAST_CONNECTION=reverb
+REVERB_APP_ID=local-app
+REVERB_APP_KEY=local-key
+REVERB_APP_SECRET=local-secret
+REVERB_HOST=127.0.0.1
+REVERB_PORT=8080
+REVERB_SCHEME=http
+```
+
+Efter ändring:
+
+```bash
+php artisan optimize:clear
+php artisan config:cache
+sudo systemctl restart stuckbema-reverb
+```
+
+### Databasrättigheter
+
+Laravel-migrationer behöver äga eller få ändra tabellerna i PostgreSQL. Om du får `must be owner of table system_settings`, logga in som databasadmin och kör:
+
+```sql
+\c stuckbema
+ALTER TABLE system_settings OWNER TO <db_user>;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO <db_user>;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO <db_user>;
+GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO <db_user>;
+```
+
+Byt `<db_user>` mot värdet i `DB_USERNAME`.
+
+### Lösenordshashar
+
+Nya användare och lösenordsbyten sparas med `Hash::make()`. Om databasen innehåller gamla klartextlösenord eller hashformat Laravel inte accepterar kan de repareras säkert:
+
+```bash
+php artisan users:repair-password-hashes --dry-run
+php artisan users:repair-password-hashes
+```
+
+Kommandot sätter ett temporärt bcrypt-lösenord och markerar användaren för lösenordsbyte vid nästa inloggning.
+
+### Driftkontroller
+
+Kör utan äldre, borttagna Artisan-flaggor:
+
+```bash
+composer dump-autoload
+php artisan optimize:clear
+php artisan route:list
+php artisan migrate:status
+php artisan config:cache
+```
+
 ## Viktigt
 
 Den interna webbappen använder Laravel-sessioner. API-tokenflödet finns endast kvar för externa system och äldre klienter som fortfarande använder `/api/...`.

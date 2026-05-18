@@ -78,7 +78,7 @@ class LiveMap extends Component
     private function driverRows(): array
     {
         return DB::table('users')
-            ->whereIn('role', ['owner', 'manager', 'admin', 'driver'])
+            ->whereIn('role', ['owner', 'firmatecknare', 'manager', 'arbetsledare', 'admin', 'driver', 'forare'])
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get()

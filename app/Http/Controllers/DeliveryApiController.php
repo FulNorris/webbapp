@@ -9,9 +9,41 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class DeliveryApiController extends Controller
 {
+    private array $roles = ['firmatecknare', 'admin', 'arbetsledare', 'personal', 'support', 'forare', 'viewer', 'kund'];
+
+    private array $roleAliases = [
+        'owner' => 'firmatecknare',
+        'firmatecknare' => 'firmatecknare',
+        'admin' => 'admin',
+        'manager' => 'arbetsledare',
+        'supervisor' => 'arbetsledare',
+        'arbetsledare' => 'arbetsledare',
+        'worker' => 'personal',
+        'personal' => 'personal',
+        'support' => 'support',
+        'driver' => 'forare',
+        'forare' => 'forare',
+        'förare' => 'forare',
+        'viewer' => 'viewer',
+        'kund' => 'kund',
+        'customer' => 'kund',
+    ];
+
+    private array $roleLabels = [
+        'firmatecknare' => 'Firmatecknare',
+        'admin' => 'Admin',
+        'arbetsledare' => 'Arbetsledare / Driftansvarig',
+        'personal' => 'Personal / Kontor',
+        'support' => 'Support',
+        'forare' => 'Förare',
+        'viewer' => 'Läsbehörighet',
+        'kund' => 'Kund / Extern mottagare',
+    ];
+
     private function json($data, int $status = 200)
     {
         return response()->json($data, $status);
@@ -100,6 +132,167 @@ class DeliveryApiController extends Controller
         return $user;
     }
 
+    private function normalizedRole(?string $role): string
+    {
+        $key = Str::of((string) $role)->lower()->ascii()->replace(' ', '_')->toString();
+
+        return $this->roleAliases[$key] ?? (in_array($key, $this->roles, true) ? $key : 'viewer');
+    }
+
+    private function roleLabel(?string $role): string
+    {
+        return $this->roleLabels[$this->normalizedRole($role)] ?? (string) $role;
+    }
+
+    private function allPermissions(): array
+    {
+        return [
+            'users.view', 'users.create', 'users.update', 'users.delete', 'users.change_password', 'users.change_role',
+            'roles.view', 'roles.update',
+            'deliveries.view_all', 'deliveries.view_own', 'deliveries.create', 'deliveries.update', 'deliveries.delete', 'deliveries.assign_driver', 'deliveries.update_status',
+            'drivers.view', 'drivers.create', 'drivers.update', 'drivers.delete',
+            'customers.view', 'customers.create', 'customers.update', 'customers.delete',
+            'articles.view', 'articles.create', 'articles.update', 'articles.delete',
+            'work_orders.view', 'work_orders.create', 'work_orders.update', 'work_orders.delete',
+            'tracking.view', 'tracking.create', 'tracking.update', 'tracking.send',
+            'settings.view', 'settings.update',
+            'logs.view', 'logs.export', 'logs.security_view',
+            'system.view_status', 'system.manage_api', 'system.full_access',
+        ];
+    }
+
+    private function permissionMatrix(): array
+    {
+        return [
+            'admin' => [
+                'users.view', 'users.create', 'users.update', 'users.delete', 'users.change_password', 'users.change_role',
+                'roles.view', 'roles.update',
+                'deliveries.view_all', 'deliveries.create', 'deliveries.update', 'deliveries.delete', 'deliveries.assign_driver', 'deliveries.update_status',
+                'drivers.view', 'drivers.create', 'drivers.update', 'drivers.delete',
+                'customers.view', 'customers.create', 'customers.update', 'customers.delete',
+                'articles.view', 'articles.create', 'articles.update', 'articles.delete',
+                'work_orders.view', 'work_orders.create', 'work_orders.update', 'work_orders.delete',
+                'tracking.view', 'tracking.create', 'tracking.update', 'tracking.send',
+                'settings.view', 'settings.update',
+                'logs.view', 'logs.export',
+                'system.view_status', 'system.manage_api',
+            ],
+            'arbetsledare' => [
+                'deliveries.view_all', 'deliveries.create', 'deliveries.update', 'deliveries.assign_driver', 'deliveries.update_status',
+                'drivers.view', 'customers.view', 'customers.create', 'customers.update',
+                'articles.view', 'articles.create', 'articles.update',
+                'work_orders.view', 'work_orders.create', 'work_orders.update',
+                'tracking.view', 'tracking.create', 'tracking.send',
+                'logs.view',
+            ],
+            'personal' => [
+                'deliveries.view_all', 'deliveries.create', 'deliveries.update',
+                'customers.view', 'customers.create', 'customers.update',
+                'articles.view', 'work_orders.view', 'work_orders.create', 'tracking.view',
+            ],
+            'support' => [
+                'users.view', 'deliveries.view_all', 'drivers.view', 'customers.view', 'articles.view',
+                'work_orders.view', 'tracking.view', 'logs.view', 'system.view_status',
+            ],
+            'forare' => ['deliveries.view_own', 'deliveries.update_status', 'tracking.view'],
+            'viewer' => ['deliveries.view_all', 'customers.view', 'articles.view', 'work_orders.view', 'tracking.view'],
+            'kund' => ['tracking.view'],
+        ];
+    }
+
+    private function permissionsFor(?string $role): array
+    {
+        $normalized = $this->normalizedRole($role);
+        $permissions = array_fill_keys($this->allPermissions(), false);
+
+        if ($normalized === 'firmatecknare') {
+            return array_fill_keys($this->allPermissions(), true);
+        }
+
+        foreach ($this->permissionMatrix()[$normalized] ?? [] as $permission) {
+            $permissions[$permission] = true;
+        }
+
+        return $permissions;
+    }
+
+    private function hasPermission($user, string $permission): bool
+    {
+        $permissions = $this->permissionsFor($user->role ?? null);
+
+        return (bool) ($permissions['system.full_access'] ?? false) || (bool) ($permissions[$permission] ?? false);
+    }
+
+    private function requirePermission(Request $request, string $permission)
+    {
+        $user = $this->requireUser($request);
+        abort_unless($this->hasPermission($user, $permission), 403, 'Saknar behörighet');
+
+        return $user;
+    }
+
+    private function requireAnyPermission(Request $request, array $permissions)
+    {
+        $user = $this->requireUser($request);
+        $allowed = collect($permissions)->contains(fn (string $permission) => $this->hasPermission($user, $permission));
+        abort_unless($allowed, 403, 'Saknar behörighet');
+
+        return $user;
+    }
+
+    private function roleOptions(): array
+    {
+        return collect($this->roles)
+            ->map(fn (string $role) => ['label' => $this->roleLabels[$role], 'value' => $role])
+            ->values()
+            ->all();
+    }
+
+    private function roleMatrix(): array
+    {
+        return collect($this->roles)
+            ->map(function (string $role, int $index) {
+                $permissions = $this->permissionsFor($role);
+
+                return [
+                    'role' => $role,
+                    'label' => $this->roleLabels[$role],
+                    'level' => $index + 1,
+                    'permissions' => $permissions,
+                    'allowedPermissions' => array_values(array_filter(array_keys($permissions), fn (string $permission) => $permissions[$permission])),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function allowedRoleInputs(): array
+    {
+        return array_values(array_unique([...$this->roles, ...array_keys($this->roleAliases)]));
+    }
+
+    private function guardUserMutation($actor, $target, ?string $newRole = null): void
+    {
+        $actorIsFirmatecknare = $this->hasPermission($actor, 'system.full_access');
+        $targetIsFirmatecknare = $this->normalizedRole($target->role ?? null) === 'firmatecknare';
+        $newRoleIsFirmatecknare = $newRole === 'firmatecknare';
+
+        abort_if(($targetIsFirmatecknare || $newRoleIsFirmatecknare) && ! $actorIsFirmatecknare, 403, 'Endast firmatecknare får ändra firmatecknare.');
+    }
+
+    private function guardOrderAccess($user, $order): void
+    {
+        if ($this->hasPermission($user, 'deliveries.view_all')) {
+            return;
+        }
+
+        abort_unless(
+            ($order->driver_id ?? null) === $user->id || ($order->assigned_driver_id ?? null) === $user->id,
+            403,
+            'Du har inte åtkomst till den leveransen.'
+        );
+    }
+
     private function publicUser($user)
     {
         if (! $user) {
@@ -114,6 +307,9 @@ class DeliveryApiController extends Controller
             'lastName' => $user->last_name,
             'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')),
             'role' => $user->role,
+            'roleKey' => $this->normalizedRole($user->role),
+            'roleLabel' => $this->roleLabel($user->role),
+            'permissions' => $this->permissionsFor($user->role),
             'active' => (bool) $user->active,
             'phone' => $user->phone,
             'imagePath' => $user->image_path,
@@ -248,9 +444,167 @@ class DeliveryApiController extends Controller
         ];
     }
 
+    private function recipientKey(?string $value): string
+    {
+        return Str::of((string) $value)->squish()->lower()->ascii()->toString();
+    }
+
+    private function isValidRecipientName(?string $name): bool
+    {
+        $clean = Str::of((string) $name)->squish()->toString();
+        if (strlen($clean) < 2 || filter_var($clean, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        $ascii = Str::of($clean)->lower()->ascii()->toString();
+        if (in_array($ascii, ['anvandare', 'user', 'unknown', 'okand'], true)) {
+            return false;
+        }
+
+        return ! preg_match('/\b(test|codex|example|demo)\b/i', $ascii);
+    }
+
+    private function recipientRows(?string $query = null): array
+    {
+        $addressByName = DB::table('orders')
+            ->whereNotNull('mottagare')
+            ->where('mottagare', '<>', '')
+            ->whereNotNull('adress')
+            ->where('adress', '<>', '')
+            ->orderByDesc('updated_at')
+            ->limit(1000)
+            ->get(['mottagare', 'adress'])
+            ->reduce(function (array $carry, object $row) {
+                $key = $this->recipientKey($row->mottagare);
+                if ($key !== '' && ! isset($carry[$key])) {
+                    $carry[$key] = $row->adress;
+                }
+
+                return $carry;
+            }, []);
+
+        $rows = collect();
+
+        DB::table('users')
+            ->where('active', true)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get(['id', 'first_name', 'last_name', 'phone', 'email', 'role', 'updated_at'])
+            ->each(function (object $user) use ($rows, $addressByName) {
+                $name = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
+                $key = $this->recipientKey($name);
+                if (! $this->isValidRecipientName($name)) {
+                    return;
+                }
+
+                $rows->push([
+                    'id' => $user->id,
+                    'type' => 'user',
+                    'label' => $name,
+                    'value' => $name,
+                    'name' => $name,
+                    'phone' => $user->phone,
+                    'email' => $user->email,
+                    'role' => $this->normalizedRole($user->role),
+                    'source' => 'användare',
+                    'sourceLabel' => $this->roleLabel($user->role),
+                    'address' => $addressByName[$key] ?? null,
+                    'updatedAt' => $user->updated_at,
+                ]);
+            });
+
+        DB::table('people')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'phone', 'email', 'role', 'source', 'updated_at'])
+            ->each(function (object $person) use ($rows, $addressByName) {
+                $name = trim((string) $person->name);
+                $key = $this->recipientKey($name);
+                if (! $this->isValidRecipientName($name)) {
+                    return;
+                }
+
+                $rows->push([
+                    'id' => $person->id,
+                    'type' => 'person',
+                    'label' => $name,
+                    'value' => $name,
+                    'name' => $name,
+                    'phone' => $person->phone,
+                    'email' => $person->email,
+                    'role' => $this->normalizedRole($person->role),
+                    'source' => $person->source ?: 'person',
+                    'sourceLabel' => $person->role ? $this->roleLabel($person->role) : 'Mottagare',
+                    'address' => $addressByName[$key] ?? null,
+                    'updatedAt' => $person->updated_at,
+                ]);
+            });
+
+        $queryKey = $this->recipientKey($query);
+        $deduplicated = $rows
+            ->filter(function (array $row) use ($queryKey) {
+                return $queryKey === '' || str_contains($this->recipientKey($row['name']), $queryKey);
+            })
+            ->reduce(function (array $carry, array $row) {
+                $key = $this->recipientKey($row['name']);
+                $existing = $carry[$key] ?? null;
+
+                if (! $existing || (! $existing['phone'] && $row['phone']) || ($row['type'] === 'person' && $existing['type'] !== 'person')) {
+                    $carry[$key] = $row;
+                }
+
+                return $carry;
+            }, []);
+
+        return collect($deduplicated)
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->take(50)
+            ->all();
+    }
+
+    private function logRows(): array
+    {
+        $path = storage_path('logs/laravel.log');
+        if (! is_file($path)) {
+            return [];
+        }
+
+        $lines = array_slice(file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [], -600);
+        $rows = [];
+
+        foreach (array_reverse($lines) as $line) {
+            if (preg_match('/^\[(?<time>.+?)\]\s+(?<env>[^.]+)\.(?<level>[^:]+):\s+(?<message>.*)$/', $line, $matches)) {
+                $rows[] = [
+                    'time' => $matches['time'],
+                    'user' => 'System',
+                    'role' => 'system',
+                    'event' => Str::limit($matches['message'], 140, ''),
+                    'module' => 'Laravel',
+                    'ip' => '-',
+                    'status' => strtolower($matches['level']),
+                    'details' => Str::limit($line, 1000, ''),
+                ];
+            } elseif ($rows) {
+                $last = array_key_last($rows);
+                $rows[$last]['details'] = Str::limit($rows[$last]['details']."\n".$line, 1600, '');
+            }
+
+            if (count($rows) >= 200) {
+                break;
+            }
+        }
+
+        return $rows;
+    }
+
     private function fieldSearch(string $field, string $query, bool $driversOnly = false): array
     {
         $field = in_array($field, ['name', 'email', 'phone', 'driver'], true) ? $field : 'name';
+        if ($field === 'name' && ! $driversOnly) {
+            return $this->recipientRows($query);
+        }
+
         $like = '%'.strtolower(trim($query)).'%';
         $phoneLike = '%'.preg_replace('/[^0-9+]/', '', $query).'%';
         $condition = match ($field) {
@@ -259,7 +613,7 @@ class DeliveryApiController extends Controller
             default => "lower(coalesce(name, '')) like ?",
         };
         $param = $field === 'phone' ? $phoneLike : $like;
-        $driverFilter = $driversOnly ? "and lower(coalesce(role, '')) in ('driver','chaufför','admin','manager','owner')" : '';
+        $driverFilter = $driversOnly ? "and lower(coalesce(role, '')) in ('driver','forare','förare','chaufför','admin','manager','owner','firmatecknare','arbetsledare')" : '';
 
         $rows = DB::select(
             "with searchable as (
@@ -449,29 +803,47 @@ class DeliveryApiController extends Controller
 
     public function users(Request $request)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'users.view');
 
         return $this->json(DB::table('users')->orderByDesc('created_at')->get()->map(fn ($user) => $this->publicUser($user)));
     }
 
     public function createUser(Request $request)
     {
-        $this->requireUser($request);
-        $email = strtolower(trim($request->input('email')));
+        $actor = $this->requirePermission($request, 'users.create');
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'firstName' => ['nullable', 'string', 'max:120'],
+            'first_name' => ['nullable', 'string', 'max:120'],
+            'lastName' => ['nullable', 'string', 'max:120'],
+            'last_name' => ['nullable', 'string', 'max:120'],
+            'name' => ['nullable', 'string', 'max:240'],
+            'phone' => ['nullable', 'string', 'max:80'],
+            'role' => ['nullable', Rule::in($this->allowedRoleInputs())],
+            'password' => ['nullable', 'string', 'min:8'],
+            'tempPassword' => ['nullable', 'string', 'min:8'],
+            'active' => ['boolean'],
+        ]);
+
+        $email = strtolower(trim($data['email']));
         $password = $request->input('password') ?: $request->input('tempPassword') ?: Str::password(12);
         $id = 'usr_'.Str::uuid();
-        $name = trim((string) $request->input('name', ''));
+        $name = trim((string) ($data['name'] ?? ''));
+        $firstName = $data['firstName'] ?? $data['first_name'] ?? (explode(' ', $name)[0] ?: 'Användare');
+        $lastName = $data['lastName'] ?? $data['last_name'] ?? trim(substr($name, strlen(explode(' ', $name)[0] ?? '')));
+        $role = $this->normalizedRole($data['role'] ?? 'personal');
+        abort_if($role === 'firmatecknare' && ! $this->hasPermission($actor, 'system.full_access'), 403, 'Endast firmatecknare får skapa firmatecknare.');
 
         DB::table('users')->insert([
             'id' => $id,
             'email' => $email,
             'email_key' => $email,
-            'first_name' => $request->input('firstName', $request->input('first_name', explode(' ', $name)[0] ?: 'Användare')),
-            'last_name' => $request->input('lastName', $request->input('last_name', trim(substr($name, strlen(explode(' ', $name)[0] ?? ''))))),
-            'role' => $request->input('role', 'worker'),
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'role' => $role,
             'password_hash' => Hash::make($password),
             'active' => $request->boolean('active', true),
-            'phone' => $request->input('phone'),
+            'phone' => $data['phone'] ?? null,
             'visibility' => 'offline',
             'created_at' => now(),
             'updated_at' => now(),
@@ -484,7 +856,10 @@ class DeliveryApiController extends Controller
 
     public function updateUser(Request $request, $id)
     {
-        $this->requireUser($request);
+        $actor = $this->requirePermission($request, 'users.update');
+        $target = DB::table('users')->where('id', $id)->first();
+        abort_if(! $target, 404, 'Användaren hittades inte');
+
         $map = [
             'email' => 'email',
             'firstName' => 'first_name',
@@ -508,6 +883,12 @@ class DeliveryApiController extends Controller
             $updates['email_key'] = strtolower(trim($updates['email']));
         }
 
+        if (isset($updates['role'])) {
+            $updates['role'] = $this->normalizedRole($updates['role']);
+        }
+
+        $this->guardUserMutation($actor, $target, $updates['role'] ?? null);
+
         $updates['updated_at'] = now();
         DB::table('users')->where('id', $id)->update($updates);
 
@@ -516,7 +897,11 @@ class DeliveryApiController extends Controller
 
     public function updateUserPassword(Request $request, $id)
     {
-        $this->requireUser($request);
+        $actor = $this->requirePermission($request, 'users.change_password');
+        $target = DB::table('users')->where('id', $id)->first();
+        abort_if(! $target, 404, 'Användaren hittades inte');
+        $this->guardUserMutation($actor, $target);
+
         DB::table('users')->where('id', $id)->update([
             'password_hash' => Hash::make($request->input('password', $request->input('newPassword', 'ChangeMe123!'))),
             'is_first_login' => true,
@@ -528,7 +913,12 @@ class DeliveryApiController extends Controller
 
     public function deleteUser(Request $request, $id)
     {
-        $this->requireUser($request);
+        $actor = $this->requirePermission($request, 'users.delete');
+        $target = DB::table('users')->where('id', $id)->first();
+        abort_if(! $target, 404, 'Användaren hittades inte');
+        abort_if($target->id === $actor->id, 422, 'Du kan inte ta bort ditt eget konto.');
+        $this->guardUserMutation($actor, $target);
+
         DB::table('users')->where('id', $id)->delete();
 
         return $this->json(['success' => true]);
@@ -536,14 +926,14 @@ class DeliveryApiController extends Controller
 
     public function settings(Request $request)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'settings.view');
 
         return $this->json($this->settingsRow());
     }
 
     public function updateSettings(Request $request)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'settings.update');
         $data = $request->all();
 
         DB::table('system_settings')->updateOrInsert(['id' => 1], [
@@ -565,7 +955,7 @@ class DeliveryApiController extends Controller
 
     public function adminSummary(Request $request)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'system.view_status');
         $roles = DB::table('users')->select('role', DB::raw('count(*) as count'))->groupBy('role')->pluck('count', 'role');
         $statuses = collect(DB::select("
             select normalized_status as status, count(*) as count
@@ -601,16 +991,65 @@ class DeliveryApiController extends Controller
         ]);
     }
 
+    public function adminOverview(Request $request)
+    {
+        return $this->adminSummary($request);
+    }
+
+    public function roles(Request $request)
+    {
+        $this->requirePermission($request, 'roles.view');
+
+        return $this->json([
+            'roles' => $this->roleOptions(),
+            'matrix' => $this->roleMatrix(),
+        ]);
+    }
+
+    public function adminLogs(Request $request)
+    {
+        $this->requirePermission($request, 'logs.view');
+
+        return $this->json([
+            'results' => $this->logRows(),
+            'generatedAt' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function recipients(Request $request)
+    {
+        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
+
+        return $this->json([
+            'type' => 'recipients',
+            'results' => $this->recipientRows($request->query('q', '')),
+        ]);
+    }
+
+    public function recipientPhone(Request $request)
+    {
+        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
+        $name = $request->query('name', $request->query('q', ''));
+        $match = collect($this->recipientRows($name))
+            ->first(fn (array $row) => $this->recipientKey($row['name']) === $this->recipientKey($name));
+
+        return $this->json([
+            'name' => $name,
+            'phone' => $match['phone'] ?? null,
+            'recipient' => $match,
+        ]);
+    }
+
     public function drivers(Request $request)
     {
-        $this->requireUser($request);
+        $this->requireAnyPermission($request, ['drivers.view', 'deliveries.assign_driver']);
 
         return $this->json($this->fieldSearch('driver', $request->query('q', ''), true));
     }
 
     public function searchPeople(Request $request)
     {
-        $this->requireUser($request);
+        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
         $field = $request->query('field', 'name');
         $results = $this->fieldSearch($field, $request->query('q', ''));
 
@@ -619,7 +1058,7 @@ class DeliveryApiController extends Controller
 
     public function suggest(Request $request, $field)
     {
-        $this->requireUser($request);
+        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
         $type = ['names' => 'name', 'emails' => 'email', 'phones' => 'phone'][$field] ?? 'name';
         $results = $this->fieldSearch($type, $request->query('q', ''));
 
@@ -628,7 +1067,7 @@ class DeliveryApiController extends Controller
 
     public function searchDrivers(Request $request)
     {
-        $this->requireUser($request);
+        $this->requireAnyPermission($request, ['drivers.view', 'deliveries.assign_driver']);
 
         return $this->json(['type' => 'driver', 'results' => $this->fieldSearch('driver', $request->query('q', ''), true)]);
     }
@@ -721,14 +1160,22 @@ class DeliveryApiController extends Controller
 
     public function orders(Request $request)
     {
-        $this->requireUser($request);
+        $user = $this->requireAnyPermission($request, ['deliveries.view_all', 'deliveries.view_own']);
+        $query = DB::table('orders')->orderByDesc('created_at');
 
-        return $this->json(DB::table('orders')->orderByDesc('created_at')->get()->map(fn ($order) => $this->orderRow($order)));
+        if (! $this->hasPermission($user, 'deliveries.view_all')) {
+            $query->where(function ($builder) use ($user) {
+                $builder->where('driver_id', $user->id)
+                    ->orWhere('assigned_driver_id', $user->id);
+            });
+        }
+
+        return $this->json($query->get()->map(fn ($order) => $this->orderRow($order)));
     }
 
     public function createOrder(Request $request)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'deliveries.create');
         $data = $this->orderInput($request);
         $data['created_by'] = $user->id;
         $data['updated_by'] = $user->id;
@@ -748,7 +1195,7 @@ class DeliveryApiController extends Controller
 
     public function updateOrder(Request $request, $id)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'deliveries.update');
         $data = $this->orderInput($request, $id);
         unset($data['id']);
         $data['updated_by'] = $user->id;
@@ -764,11 +1211,12 @@ class DeliveryApiController extends Controller
 
     public function startOrder(Request $request, $id)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'deliveries.update_status');
         $order = DB::table('orders')->where('id', $id)->first();
         if (! $order) {
             return $this->json(['error' => 'Leveransen hittades inte'], 404);
         }
+        $this->guardOrderAccess($user, $order);
 
         $token = $order->tracking_token ?: Str::random(64);
         $sessionId = $order->tracking_session_id ?: Str::random(48);
@@ -818,7 +1266,13 @@ class DeliveryApiController extends Controller
 
     public function stopOrder(Request $request, $id)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'deliveries.update_status');
+        $order = DB::table('orders')->where('id', $id)->first();
+        if (! $order) {
+            return $this->json(['error' => 'Leveransen hittades inte'], 404);
+        }
+        $this->guardOrderAccess($user, $order);
+
         DB::table('orders')->where('id', $id)->update([
             'status' => 'paused',
             'tracking_enabled' => false,
@@ -836,7 +1290,13 @@ class DeliveryApiController extends Controller
 
     public function delivered(Request $request, $id)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'deliveries.update_status');
+        $existing = DB::table('orders')->where('id', $id)->first();
+        if (! $existing) {
+            return $this->json(['error' => 'Leveransen hittades inte'], 404);
+        }
+        $this->guardOrderAccess($user, $existing);
+
         DB::table('orders')->where('id', $id)->update([
             'status' => 'delivered',
             'delivered_by' => $user->id,
@@ -856,7 +1316,13 @@ class DeliveryApiController extends Controller
 
     public function location(Request $request, $id)
     {
-        $user = $this->requireUser($request);
+        $user = $this->requirePermission($request, 'deliveries.update_status');
+        $order = DB::table('orders')->where('id', $id)->first();
+        if (! $order) {
+            return $this->json(['error' => 'Leveransen hittades inte'], 404);
+        }
+        $this->guardOrderAccess($user, $order);
+
         $lat = (float) $request->input('lat', $request->input('latitude'));
         $lng = (float) $request->input('lng', $request->input('longitude'));
         $location = [
@@ -885,7 +1351,7 @@ class DeliveryApiController extends Controller
 
     public function resendSms(Request $request, $id)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'tracking.send');
         DB::table('orders')->where('id', $id)->update([
             'sms_sent_at' => now(),
             'sms_status' => 'logged',
@@ -897,7 +1363,7 @@ class DeliveryApiController extends Controller
 
     public function deleteOrder(Request $request, $id)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'deliveries.delete');
         DB::table('order_items')->where('order_id', $id)->delete();
         DB::table('orders')->where('id', $id)->delete();
 
@@ -906,7 +1372,7 @@ class DeliveryApiController extends Controller
 
     public function clearOrders(Request $request)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'deliveries.delete');
         DB::table('order_items')->delete();
         DB::table('orders')->delete();
 
@@ -915,7 +1381,7 @@ class DeliveryApiController extends Controller
 
     public function workOrderSuggestions(Request $request)
     {
-        $this->requireUser($request);
+        $this->requirePermission($request, 'work_orders.view');
         $query = strtolower($request->query('q', ''));
 
         return $this->json(DB::table('external_work_orders')
