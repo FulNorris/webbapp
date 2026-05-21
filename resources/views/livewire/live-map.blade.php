@@ -48,8 +48,17 @@
             }
 
             function updateDriver(payload) {
-                const pill = document.querySelector(`[data-driver-pill="${CSS.escape(payload.driverId || '')}"]`);
-                if (!pill) return;
+                if (!payload?.driverId) return;
+                let pill = document.querySelector(`[data-driver-pill="${CSS.escape(payload.driverId)}"]`);
+                if (!pill) {
+                    const strip = document.querySelector('.live-map-driver-strip');
+                    if (!strip) return;
+                    pill = document.createElement('span');
+                    pill.className = 'driver-pill';
+                    pill.dataset.driverPill = payload.driverId;
+                    pill.innerHTML = `<span></span>${escapeHtml(payload.driverName || 'Förare')}`;
+                    strip.appendChild(pill);
+                }
                 pill.classList.toggle('is-online', payload.visibility === 'online');
             }
 
@@ -118,11 +127,13 @@
                 fitInitialBounds();
 
                 $wire.on('location-updated', (event) => {
-                    upsertMarker(event.detail?.payload || event.detail, true);
+                    const payload = event?.detail?.payload || event?.payload || event?.detail || event;
+                    upsertMarker(payload, true);
                 });
 
                 $wire.on('driver-visibility-updated', (event) => {
-                    updateDriver(event.detail?.payload || event.detail);
+                    const payload = event?.detail?.payload || event?.payload || event?.detail || event;
+                    updateDriver(payload);
                 });
             }
 

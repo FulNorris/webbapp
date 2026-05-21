@@ -8,6 +8,7 @@ use App\Services\WebPushNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -323,6 +324,188 @@ class DeliveryApiController extends Controller
         ];
     }
 
+    private function productForArticle(?string $article): ?object
+    {
+        $article = trim((string) $article);
+        if ($article === '' || ! Schema::hasTable('products')) {
+            return null;
+        }
+
+        $fallback = null;
+
+        foreach ($this->productSkuCandidates($article) as $candidate) {
+            $product = DB::table('products')
+                ->whereRaw('lower(sku) = ?', [$candidate])
+                ->first();
+
+            if (! $product) {
+                continue;
+            }
+
+            if ($this->productHasImage($product)) {
+                return $product;
+            }
+
+            $fallback ??= $product;
+        }
+
+        foreach ($this->productSkuCandidates($article) as $candidate) {
+            if (mb_strlen($candidate, 'UTF-8') < 3) {
+                continue;
+            }
+
+            $product = DB::table('products')
+                ->whereRaw('lower(title) like ?', ['%'.$candidate.'%'])
+                ->where(function ($query) {
+                    $query->whereNotNull('primary_image_path')
+                        ->orWhereNotNull('primary_image_url');
+                })
+                ->orderBy('sku')
+                ->first();
+
+            if ($product) {
+                return $product;
+            }
+        }
+
+        return $fallback;
+    }
+
+    private function productSkuCandidates(string $article): array
+    {
+        $key = mb_strtolower(trim($article), 'UTF-8');
+        $firstToken = mb_strtolower(strtok($article, " \t\r\n-") ?: $article, 'UTF-8');
+        $compact = preg_replace('/[^a-z0-9]/', '', $key) ?: '';
+        $candidates = [$key, $firstToken, $compact];
+
+        if (preg_match('/^tlp?(\d+)/', $compact, $matches)) {
+            $digits = $matches[1];
+            $listNumber = substr($digits, 0, 2);
+            array_push($candidates, 'sl'.$digits, 'sl'.$listNumber, 'tl'.$digits);
+
+            if (str_starts_with($compact, 'tlp')) {
+                array_push($candidates, 'tlp'.$digits, 'rp7-'.$digits.'0', 'rp7'.$digits.'0');
+            }
+        }
+
+        return array_values(array_unique(array_filter($candidates)));
+    }
+
+    private function productHasImage(object $product): bool
+    {
+        return filled($product->primary_image_path ?? null) || filled($product->primary_image_url ?? null);
+    }
+
+    private function quantityValue($value): int
+    {
+        if (preg_match('/\d+(?:[,.]\d+)?/', (string) $value, $matches)) {
+            return max(0, (int) ceil((float) str_replace(',', '.', $matches[0])));
+        }
+
+        return 0;
+    }
+
+    private function imageUrl(?string $imagePath): ?string
+    {
+        $imagePath = trim((string) $imagePath);
+        $base = rtrim(str_replace('\\', '/', base_path('produkter')), '/').'/';
+        $path = str_replace('\\', '/', $imagePath);
+        if ($imagePath === '' || ! str_starts_with($path, $base)) {
+            return null;
+        }
+
+        return '/produkter/'.implode('/', array_map('rawurlencode', explode('/', substr($path, strlen($base)))));
+    }
+
+    private function markOrderItemsDelivered(string $orderId, object $user): int
+    {
+        return DB::table('order_items')
+            ->where('order_id', $orderId)
+            ->pluck('id')
+            ->sum(fn ($itemId) => $this->markOrderItemDelivered((int) $itemId, $user));
+    }
+
+    private function markOrderItemDelivered(int $itemId, object $user, $quantity = null): int
+    {
+        return DB::transaction(function () use ($itemId, $user, $quantity) {
+            $item = DB::table('order_items')->where('id', $itemId)->lockForUpdate()->first();
+            if (! $item) {
+                return 0;
+            }
+
+            $requested = max(1, (int) ($item->requested_quantity ?? $this->quantityValue($item->antal)));
+            $current = (int) ($item->delivered_quantity ?? $this->quantityValue($item->delivered_antal ?? 0));
+            $quantityToDeliver = $quantity !== null && $quantity !== ''
+                ? max(1, $this->quantityValue($quantity))
+                : max(0, $requested - $current);
+            $target = min($requested, $current + $quantityToDeliver);
+            $delta = max(0, $target - $current);
+            if ($delta === 0) {
+                return 0;
+            }
+
+            $itemProductSku = ($item->product_sku ?? null) ?: null;
+            $product = $this->productForArticle($itemProductSku ?: $item->artikel);
+            $productSku = $product?->sku ?: $itemProductSku;
+
+            DB::table('order_items')->where('id', $itemId)->update([
+                'product_sku' => $productSku,
+                'product_title' => $product?->title,
+                'product_image_path' => $product?->primary_image_path,
+                'requested_quantity' => $requested,
+                'delivered_quantity' => $target,
+                'remaining_quantity' => max(0, $requested - $target),
+                'delivered_antal' => (string) $target,
+                'delivered_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if ($productSku && Schema::hasTable('products')) {
+                $lockedProduct = DB::table('products')->where('sku', $productSku)->lockForUpdate()->first();
+                if ($lockedProduct) {
+                    $stockDelivered = max(0, (int) $lockedProduct->stock_delivered + $delta);
+                    $stockTotal = max(0, (int) $lockedProduct->stock_total);
+                    DB::table('products')->where('sku', $productSku)->update([
+                        'stock_delivered' => $stockDelivered,
+                        'stock_available' => max(0, $stockTotal - $stockDelivered),
+                        'updated_at' => now(),
+                    ]);
+
+                    if (Schema::hasTable('stock_movements')) {
+                        DB::table('stock_movements')->insert([
+                            'product_sku' => $productSku,
+                            'order_id' => $item->order_id,
+                            'order_item_id' => $itemId,
+                            'work_order_number' => $item->work_order_number,
+                            'quantity_delta' => -$delta,
+                            'type' => 'delivered',
+                            'created_by' => $user->id,
+                            'payload' => json_encode(['artikel' => $item->artikel, 'delivered' => $delta]),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+            }
+
+            if ($item->work_order_number && Schema::hasTable('work_order_delivery_events')) {
+                DB::table('work_order_delivery_events')->insert([
+                    'id' => 'evt_'.Str::uuid(),
+                    'work_order_number' => $item->work_order_number,
+                    'order_id' => $item->order_id,
+                    'item_index' => (int) ($item->sort_order ?? 0),
+                    'artikel' => $item->artikel,
+                    'delivered_antal' => (string) $delta,
+                    'delivered_by' => $user->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            return $delta;
+        });
+    }
+
     private function orderRow($row)
     {
         if (! $row) {
@@ -334,19 +517,37 @@ class DeliveryApiController extends Controller
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(fn ($item) => [
-                'id' => $item->id,
-                'artikel' => $item->artikel,
-                'article' => ($item->article ?? null) ?: $item->artikel,
-                'benamning' => $item->benamning ?? null,
-                'description' => ($item->description ?? null) ?: ($item->benamning ?? null) ?: $item->artikel,
-                'antal' => $item->antal,
-                'quantity' => ($item->quantity ?? null) ?: $item->antal,
-                'workOrderNumber' => $item->work_order_number,
-                'deliveredAntal' => $item->delivered_antal,
-                'deliveredAt' => $item->delivered_at,
-                'payload' => $this->decodeJson($item->payload ?? null, new \stdClass()),
-            ])
+            ->map(function ($item) {
+                $product = $this->productForArticle(($item->product_sku ?? null) ?: $item->artikel);
+                $requestedQuantity = (int) ($item->requested_quantity ?? $this->quantityValue($item->antal));
+                $deliveredQuantity = (int) ($item->delivered_quantity ?? $this->quantityValue($item->delivered_antal ?? 0));
+
+                return [
+                    'id' => $item->id,
+                    'artikel' => $item->artikel,
+                    'article' => ($item->article ?? null) ?: $item->artikel,
+                    'benamning' => $item->benamning ?? null,
+                    'description' => ($item->description ?? null) ?: ($item->benamning ?? null) ?: $item->artikel,
+                    'antal' => $item->antal,
+                    'quantity' => ($item->quantity ?? null) ?: $item->antal,
+                    'workOrderNumber' => $item->work_order_number,
+                    'deliveredAntal' => $item->delivered_antal,
+                    'deliveredAt' => $item->delivered_at,
+                    'requestedQuantity' => $requestedQuantity,
+                    'deliveredQuantity' => $deliveredQuantity,
+                    'remainingQuantity' => max(0, $requestedQuantity - $deliveredQuantity),
+                    'deliveredComplete' => $requestedQuantity > 0 && $deliveredQuantity >= $requestedQuantity,
+                    'product' => $product ? [
+                        'sku' => $product->sku,
+                        'title' => $product->title,
+                        'imageUrl' => $product->primary_image_url ?: $this->imageUrl($product->primary_image_path),
+                        'stockTotal' => (int) $product->stock_total,
+                        'stockDelivered' => (int) $product->stock_delivered,
+                        'stockRemaining' => max(0, (int) $product->stock_total - (int) $product->stock_delivered),
+                    ] : null,
+                    'payload' => $this->decodeJson($item->payload ?? null, new \stdClass()),
+                ];
+            })
             ->values();
 
         $address = $row->adress ?? $row->delivery_address ?? null;
@@ -1026,6 +1227,34 @@ class DeliveryApiController extends Controller
         ]);
     }
 
+    public function products(Request $request)
+    {
+        $this->requireAnyPermission($request, ['articles.view', 'deliveries.create', 'deliveries.update', 'work_orders.view']);
+        if (! Schema::hasTable('products')) {
+            return $this->json(['results' => []]);
+        }
+
+        $query = mb_strtolower(trim((string) $request->query('q', '')), 'UTF-8');
+
+        return $this->json([
+            'results' => DB::table('products')
+                ->when($query !== '', fn ($builder) => $builder->whereRaw('lower(sku) like ? or lower(title) like ?', ["%{$query}%", "%{$query}%"]))
+                ->orderBy('sku')
+                ->limit(300)
+                ->get()
+                ->map(fn ($row) => [
+                    'sku' => $row->sku,
+                    'title' => $row->title,
+                    'imageUrl' => $row->primary_image_url ?: $this->imageUrl($row->primary_image_path),
+                    'imageCount' => (int) $row->image_count,
+                    'stockTotal' => (int) $row->stock_total,
+                    'stockDelivered' => (int) $row->stock_delivered,
+                    'stockRemaining' => max(0, (int) $row->stock_total - (int) $row->stock_delivered),
+                ])
+                ->values(),
+        ]);
+    }
+
     public function recipientPhone(Request $request)
     {
         $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
@@ -1084,14 +1313,41 @@ class DeliveryApiController extends Controller
         ]);
 
         $updatedUser = DB::table('users')->where('id', $user->id)->first();
-        DriverVisibilityUpdated::dispatch([
-            'driverId' => $updatedUser->id,
-            'driverName' => trim(($updatedUser->first_name ?? '').' '.($updatedUser->last_name ?? '')) ?: $updatedUser->email,
-            'visibility' => $visibility,
-            'lastSeenAt' => now()->toIso8601String(),
-        ]);
+        if ($updatedUser) {
+            DriverVisibilityUpdated::dispatch([
+                'driverId' => $updatedUser->id,
+                'driverName' => trim(($updatedUser->first_name ?? '').' '.($updatedUser->last_name ?? '')) ?: $updatedUser->email,
+                'visibility' => $visibility,
+                'lastSeenAt' => now()->toIso8601String(),
+            ]);
+        }
 
-        return $this->json(['success' => true, 'visibility' => $visibility, 'user' => $this->publicUser($updatedUser)]);
+        if ($visibility === 'offline') {
+            $orders = DB::table('orders')
+                ->where('driver_id', $user->id)
+                ->where('tracking_enabled', true)
+                ->get();
+
+            DB::table('orders')->whereIn('id', $orders->pluck('id'))->update([
+                'tracking_enabled' => false,
+                'last_stopped_at' => now(),
+                'updated_by' => $user->id,
+                'updated_at' => now(),
+            ]);
+            DB::table('tracking_links')->whereIn('order_id', $orders->pluck('id'))->update(['active' => false, 'updated_at' => now()]);
+
+            foreach ($orders as $order) {
+                $order->tracking_enabled = false;
+                LocationUpdated::dispatch($this->locationPayload($order));
+            }
+        }
+
+        return $this->json([
+            'success' => true,
+            'visibility' => $visibility,
+            'driverId' => $updatedUser?->id,
+            'user' => $this->publicUser($updatedUser),
+        ]);
     }
 
     private function saveItems($orderId, $items): void
@@ -1101,6 +1357,8 @@ class DeliveryApiController extends Controller
         foreach (array_values($items ?: []) as $index => $item) {
             $article = (string) ($item['artikel'] ?? $item['article'] ?? $item['model'] ?? '');
             $quantity = (string) ($item['antal'] ?? $item['quantity'] ?? '');
+            $product = $this->productForArticle($article);
+            $requestedQuantity = $this->quantityValue($quantity);
 
             DB::table('order_items')->insert([
                 'order_id' => $orderId,
@@ -1112,6 +1370,12 @@ class DeliveryApiController extends Controller
                 'quantity' => $item['quantity'] ?? $quantity,
                 'sort_order' => $index,
                 'work_order_number' => $item['workOrderNumber'] ?? $item['work_order_number'] ?? null,
+                'product_sku' => $product?->sku,
+                'product_title' => $product?->title,
+                'product_image_path' => $product?->primary_image_path,
+                'requested_quantity' => $requestedQuantity,
+                'delivered_quantity' => 0,
+                'remaining_quantity' => $requestedQuantity,
                 'payload' => json_encode($item),
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -1281,6 +1545,7 @@ class DeliveryApiController extends Controller
             'updated_at' => now(),
         ]);
         DB::table('tracking_links')->where('order_id', $id)->update(['active' => false, 'updated_at' => now()]);
+        $this->markOrderItemsDelivered($id, $user);
 
         $order = DB::table('orders')->where('id', $id)->first();
         LocationUpdated::dispatch($this->locationPayload($order));
@@ -1508,7 +1773,13 @@ class DeliveryApiController extends Controller
     {
         $this->requireUser($request);
 
-        return $this->json(['publicKey' => env('VAPID_PUBLIC_KEY'), 'enabled' => ! empty(env('VAPID_PUBLIC_KEY'))]);
+        $notifier = app(WebPushNotifier::class);
+
+        return $this->json([
+            'publicKey' => env('VAPID_PUBLIC_KEY'),
+            'configured' => $notifier->configured(),
+            'enabled' => $notifier->enabled(),
+        ]);
     }
 
     public function pushSubscribe(Request $request)
@@ -1519,21 +1790,43 @@ class DeliveryApiController extends Controller
             return $this->json(['error' => 'endpoint saknas'], 400);
         }
 
+        $p256dh = $request->input('keys.p256dh', $request->input('subscription.keys.p256dh', ''));
+        $auth = $request->input('keys.auth', $request->input('subscription.keys.auth', ''));
+        if ($p256dh === '' || $auth === '') {
+            return $this->json(['error' => 'push-nycklar saknas'], 422);
+        }
+
+        $existingSubscription = DB::table('push_subscriptions')->where('endpoint', $endpoint)->first();
+        $subscriptionId = $request->input('id') ?: $existingSubscription?->id ?: 'psh_'.Str::uuid();
+
         DB::table('push_subscriptions')->updateOrInsert(['endpoint' => $endpoint], [
-            'id' => $request->input('id', 'psh_'.Str::uuid()),
+            'id' => $subscriptionId,
             'user_id' => $user->id,
             'platform' => 'web',
             'provider' => 'webpush',
-            'p256dh' => $request->input('keys.p256dh', $request->input('subscription.keys.p256dh', '')),
-            'auth' => $request->input('keys.auth', $request->input('subscription.keys.auth', '')),
+            'p256dh' => $p256dh,
+            'auth' => $auth,
+            'permission' => $request->input('permission'),
+            'user_agent' => $request->input('userAgent', $request->userAgent()),
             'payload' => json_encode($request->all()),
             'enabled' => true,
+            'failure_count' => 0,
+            'revoked_at' => null,
             'last_seen_at' => now(),
             'updated_at' => now(),
             'created_at' => now(),
         ]);
 
-        return $this->json(['success' => true]);
+        $result = app(WebPushNotifier::class)->sendToUsers([$user->id], [
+            'notification' => [
+                'title' => 'Pushnotiser aktiva',
+                'body' => 'Den här enheten kan nu ta emot leveransnotiser.',
+                'tag' => 'push-enabled',
+            ],
+            'data' => ['url' => '/'],
+        ]);
+
+        return $this->json(['success' => true, 'subscriptionId' => $subscriptionId, 'result' => $result]);
     }
 
     public function pushDelete(Request $request)

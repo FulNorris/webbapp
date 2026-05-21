@@ -9,12 +9,14 @@ Route::post('/logout', [InternalAppController::class, 'logout'])->name('internal
 
 Route::get('/', [InternalAppController::class, 'dashboard'])->name('internal.dashboard');
 Route::get('/live-map', [InternalAppController::class, 'liveMap'])->name('internal.live-map');
+Route::get('/deliveries/pdf', [InternalAppController::class, 'deliveriesPdf'])->name('internal.deliveries.pdf');
 Route::patch('/visibility', [InternalAppController::class, 'updateVisibility'])->name('internal.visibility');
 Route::post('/orders', [InternalAppController::class, 'createOrder'])->name('internal.orders.create');
 Route::put('/orders/{id}', [InternalAppController::class, 'updateOrder'])->name('internal.orders.update');
 Route::post('/orders/{id}/location', [InternalAppController::class, 'updateOrderLocation'])->name('internal.orders.location');
 Route::patch('/orders/{id}/status', [InternalAppController::class, 'updateOrderStatus'])->name('internal.orders.status');
 Route::delete('/orders/{id}', [InternalAppController::class, 'deleteOrder'])->name('internal.orders.delete');
+Route::patch('/order-items/{item}/deliver', [InternalAppController::class, 'deliverOrderItem'])->name('internal.order-items.deliver');
 
 Route::post('/users', [InternalAppController::class, 'createUser'])->name('internal.users.create');
 Route::put('/users/{id}', [InternalAppController::class, 'updateUser'])->name('internal.users.update');
@@ -28,5 +30,6 @@ Route::delete('/push/subscription', [InternalAppController::class, 'deletePushSu
 Route::post('/push/test', [InternalAppController::class, 'pushTest'])->name('internal.push.test');
 
 Route::get('/track/{token}', [InternalAppController::class, 'track'])->name('internal.track');
+Route::get('/produkter/{folder}/{file}', [InternalAppController::class, 'productImage'])->where('file', '.*')->name('internal.products.image');
 Route::redirect('/index.html', '/');
 Route::redirect('/login.html', '/login');
