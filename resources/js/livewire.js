@@ -18,12 +18,15 @@ L.Icon.Default.mergeOptions({
 
 window.L = L;
 window.Pusher = Pusher;
+const reverbScheme = import.meta.env.VITE_REVERB_SCHEME || window.location.protocol.replace(':', '');
+const reverbPort = Number(import.meta.env.VITE_REVERB_PORT || (reverbScheme === 'https' ? 443 : 80));
+
 window.Echo = new Echo({
   broadcaster: 'reverb',
-  key: import.meta.env.VITE_REVERB_APP_KEY,
-  wsHost: import.meta.env.VITE_REVERB_HOST ?? window.location.hostname,
-  wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
-  wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
-  forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
+  key: import.meta.env.VITE_REVERB_APP_KEY || 'local-key',
+  wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
+  wsPort: reverbPort,
+  wssPort: reverbPort,
+  forceTLS: reverbScheme === 'https',
   enabledTransports: ['ws', 'wss'],
 });

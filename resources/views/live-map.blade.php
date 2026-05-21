@@ -8,9 +8,9 @@
     @livewireStyles
     @vite(['resources/js/livewire.js'])
 </head>
-<body>
-    <div class="app-shell">
-        <header class="topbar">
+<body class="app-body">
+    <div class="app-shell app-shell-live-map">
+        <header class="topbar app-header">
             <div>
                 <h1>Livekarta</h1>
                 <div class="topbar-meta">{{ $user['name'] ?: $user['email'] }} · {{ $user['role'] }}</div>
@@ -20,7 +20,7 @@
             </div>
         </header>
 
-        <main class="main live-map-main">
+        <main class="main app-main app-content live-map-main">
             <livewire:live-map />
         </main>
     </div>

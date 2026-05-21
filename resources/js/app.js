@@ -15,6 +15,7 @@ import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
 import Divider from 'primevue/divider';
 import InputText from 'primevue/inputtext';
+import Menu from 'primevue/menu';
 import Message from 'primevue/message';
 import Password from 'primevue/password';
 import Select from 'primevue/select';
@@ -54,6 +55,7 @@ createInertiaApp({
     app.component('Dialog', Dialog);
     app.component('Divider', Divider);
     app.component('InputText', InputText);
+    app.component('Menu', Menu);
     app.component('Message', Message);
     app.component('Password', Password);
     app.component('Select', Select);

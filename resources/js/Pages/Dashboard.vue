@@ -8,6 +8,7 @@ const props = defineProps({
   users: { type: Array, default: () => [] },
   drivers: { type: Array, default: () => [] },
   recipients: { type: Array, default: () => [] },
+  products: { type: Array, default: () => [] },
   settings: { type: Object, required: true },
   roles: { type: Array, default: () => [] },
   permissions: { type: Object, default: () => ({}) },
@@ -39,9 +40,11 @@ const adminTab = ref('overview');
 const editingOrderId = ref(null);
 const editingUserId = ref(null);
 const tempPasswordVisible = ref(false);
+const topMenu = ref(null);
 const logSearch = ref('');
 const logStatus = ref('');
 const logModule = ref('');
+const hiddenLogKeys = ref([]);
 const recipientAutocompleteOpen = ref(false);
 const recipientAutocompleteRef = ref(null);
 const pushState = ref({
@@ -76,6 +79,25 @@ const statusOptions = [
 
 const roleOptions = computed(() => props.roles.map((role) => (typeof role === 'string' ? { label: role, value: role } : role)));
 const canOpenAdmin = computed(() => ['users.view', 'settings.view', 'logs.view', 'system.view_status'].some((permission) => can(permission)));
+const canCreateDeliveryPdf = computed(() => ['firmatecknare', 'admin', 'arbetsledare', 'personal', 'forare'].includes(props.user.roleKey || props.user.role));
+const topMenuItems = computed(() => [
+  ...(canCreateDeliveryPdf.value ? [{
+    label: 'Skapa PDF',
+    icon: 'pi pi-file-pdf',
+    command: createDeliveriesPdf,
+  }] : [{
+    label: 'Inga menyval',
+    icon: 'pi pi-lock',
+    disabled: true,
+  }]),
+]);
+const productLookup = computed(() => {
+  const lookup = new Map();
+  props.products.forEach((product) => {
+    [product.sku, product.title].filter(Boolean).forEach((value) => lookup.set(normalizeKey(value), product));
+  });
+  return lookup;
+});
 const recipientSuggestions = computed(() => {
   const suggestions = new Map();
 
@@ -118,16 +140,21 @@ const pushLabel = computed(() => {
   return pushState.value.enabled ? 'Push aktiv' : 'Aktivera push';
 });
 const visibilityOnline = computed(() => visibilityState.value === 'online');
-const logStatusOptions = computed(() => Array.from(new Set((props.admin.logs || []).map((row) => row.status).filter(Boolean)))
+const visibleAdminLogs = computed(() => {
+  const hidden = new Set(hiddenLogKeys.value);
+  return (props.admin.logs || []).filter((row) => !hidden.has(logRowKey(row)));
+});
+const hiddenLogCount = computed(() => Math.max(0, (props.admin.logs || []).length - visibleAdminLogs.value.length));
+const logStatusOptions = computed(() => Array.from(new Set(visibleAdminLogs.value.map((row) => row.status).filter(Boolean)))
   .sort((a, b) => a.localeCompare(b, 'sv'))
   .map((status) => ({ label: status, value: status })));
-const logModuleOptions = computed(() => Array.from(new Set((props.admin.logs || []).map((row) => row.module).filter(Boolean)))
+const logModuleOptions = computed(() => Array.from(new Set(visibleAdminLogs.value.map((row) => row.module).filter(Boolean)))
   .sort((a, b) => a.localeCompare(b, 'sv'))
   .map((module) => ({ label: module, value: module })));
 const filteredLogs = computed(() => {
   const query = normalizeKey(logSearch.value);
 
-  return (props.admin.logs || []).filter((row) => {
+  return visibleAdminLogs.value.filter((row) => {
     const matchesQuery = !query || normalizeKey(Object.values(row).join(' ')).includes(query);
     const matchesStatus = !logStatus.value || row.status === logStatus.value;
     const matchesModule = !logModule.value || row.module === logModule.value;
@@ -147,6 +174,7 @@ watch(
 const orderForm = useForm(blankOrder());
 const userForm = useForm(blankUser());
 const settingsForm = useForm({
+  _token: page.props.csrfToken,
   appTitle: props.settings.appTitle,
   companyName: props.settings.companyName,
   deliveryTitle: props.settings.deliveryTitle,
@@ -158,6 +186,7 @@ const settingsForm = useForm({
 });
 
 onMounted(() => {
+  loadHiddenLogKeys();
   syncPushState();
   document.addEventListener('pointerdown', handleDocumentPointerDown);
 });
@@ -186,7 +215,7 @@ async function syncPushState() {
 }
 
 async function registerPushServiceWorker() {
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
   return navigator.serviceWorker.ready.then(() => registration);
 }
 
@@ -214,6 +243,66 @@ function subscriptionPayload(subscription) {
 
 function normalizeKey(value) {
   return String(value || '').trim().toLocaleLowerCase('sv-SE');
+}
+
+function compactProductKey(value) {
+  return normalizeKey(value).replace(/[^a-z0-9]/g, '');
+}
+
+function productHasImage(product) {
+  return Boolean(product?.imageUrl);
+}
+
+function productKeyCandidates(value) {
+  const raw = String(value || '').trim();
+  const key = normalizeKey(raw);
+  const compact = compactProductKey(raw);
+  const firstToken = normalizeKey(raw.split(/[\s-]/)[0] || raw);
+  const candidates = [key, firstToken, compact];
+  const tlMatch = compact.match(/^tlp?(\d+)/);
+
+  if (tlMatch) {
+    const digits = tlMatch[1];
+    const listNumber = digits.slice(0, 2);
+    candidates.push(`sl${digits}`, `sl${listNumber}`, `tl${digits}`);
+
+    if (compact.startsWith('tlp')) {
+      candidates.push(`tlp${digits}`, `rp7-${digits}0`, `rp7${digits}0`);
+    }
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function logRowKey(row) {
+  // The time is included so a repeated error with a new timestamp is visible again after a local clear.
+  return [
+    row.time,
+    row.user,
+    row.role,
+    row.event,
+    row.module,
+    row.ip,
+    row.status,
+    row.details,
+  ].map((value) => String(value ?? '')).join('|');
+}
+
+function loadHiddenLogKeys() {
+  try {
+    const stored = window.localStorage.getItem('stuckbema.hidden-admin-log-keys');
+    hiddenLogKeys.value = stored ? JSON.parse(stored).filter(Boolean) : [];
+  } catch {
+    hiddenLogKeys.value = [];
+  }
+}
+
+function persistHiddenLogKeys() {
+  try {
+    window.localStorage.setItem('stuckbema.hidden-admin-log-keys', JSON.stringify(hiddenLogKeys.value));
+  } catch {
+    // Local storage can be disabled; the clear still works for the current page state.
+  }
 }
 
 function applyRecipientSuggestion() {
@@ -296,11 +385,89 @@ function mapsHref(address) {
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
 }
 
+function toggleTopMenu(event) {
+  topMenu.value?.toggle(event);
+}
+
+function createDeliveriesPdf() {
+  window.open('/deliveries/pdf', '_blank', 'noopener');
+}
+
+function parseItemQuantity(value) {
+  const match = String(value || '').match(/\d+(?:[,.]\d+)?/);
+  return match ? Math.max(0, Math.ceil(Number(match[0].replace(',', '.')) || 0)) : 0;
+}
+
+function productForItem(item) {
+  let fallback = item.product || null;
+  if (productHasImage(fallback)) return fallback;
+
+  for (const candidate of productKeyCandidates(item.artikel || item.article || item.product_sku || '')) {
+    const product = productLookup.value.get(candidate);
+    if (!product) continue;
+    if (productHasImage(product)) return product;
+    fallback ||= product;
+  }
+
+  for (const candidate of productKeyCandidates(item.artikel || item.article || item.product_sku || '')) {
+    if (candidate.length < 3) continue;
+    const product = props.products.find((row) => productHasImage(row) && normalizeKey(row.title).includes(candidate));
+    if (product) return product;
+  }
+
+  return fallback;
+}
+
+function primaryDeliveryItem(order) {
+  const items = order.items || [];
+  return items.find((item) => productForItem(item)?.imageUrl) || items[0] || null;
+}
+
+function primaryDeliveryProduct(order) {
+  const item = primaryDeliveryItem(order);
+  return item ? productForItem(item) : null;
+}
+
+function deliveryItemSummary(order) {
+  const items = order.items || [];
+  if (!items.length) return order.id || 'Leverans';
+
+  const requested = items.reduce((sum, item) => sum + itemProgress(item).requested, 0);
+  return `${items.length} artiklar${requested ? ` · ${requested} st` : ''}`;
+}
+
+function deliveryDateText(order) {
+  const desired = [order.desiredDeliveryDate, order.desiredDeliveryTime].filter(Boolean).join(' ');
+  return desired || formatDate(order.createdAt) || 'Ej planerad';
+}
+
+function itemProgress(item) {
+  const requested = Number(item.requestedQuantity ?? parseItemQuantity(item.antal));
+  const delivered = Number(item.deliveredQuantity ?? parseItemQuantity(item.deliveredAntal));
+  return {
+    requested,
+    delivered,
+    remaining: Math.max(0, Number(item.remainingQuantity ?? requested - delivered)),
+    complete: requested > 0 && delivered >= requested,
+  };
+}
+
+function deliverOrderItem(item) {
+  if (!item.id) return;
+  router.patch(`/order-items/${encodeURIComponent(item.id)}/deliver`, {}, {
+    preserveScroll: true,
+  });
+}
+
 async function togglePushNotifications() {
   if (!props.push.enabled || pushState.value.busy) return;
 
   if (pushState.value.enabled) {
-    router.post('/push/test', {}, { preserveScroll: true });
+    pushState.value.busy = true;
+    router.post('/push/test', { _token: page.props.csrfToken }, {
+      preserveScroll: true,
+      onFinish: () => { pushState.value.busy = false; },
+    });
     return;
   }
 
@@ -308,6 +475,13 @@ async function togglePushNotifications() {
   try {
     if (!pushSupported()) {
       window.alert('Den här webbläsaren stöder inte pushnotiser.');
+      pushState.value.busy = false;
+      return;
+    }
+
+    if (!props.push.publicKey) {
+      window.alert('Pushnotiser saknar publik VAPID-nyckel på servern.');
+      pushState.value.busy = false;
       return;
     }
 
@@ -318,6 +492,7 @@ async function togglePushNotifications() {
 
     if (permission !== 'granted') {
       window.alert('Pushnotiser är inte tillåtna i webbläsaren.');
+      pushState.value.busy = false;
       return;
     }
 
@@ -328,16 +503,21 @@ async function togglePushNotifications() {
       applicationServerKey: urlBase64ToUint8Array(props.push.publicKey),
     });
 
-    router.post('/push/subscription', subscriptionPayload(subscription), {
+    router.post('/push/subscription', { ...subscriptionPayload(subscription), _token: page.props.csrfToken }, {
       preserveScroll: true,
       onSuccess: () => {
         pushState.value.enabled = true;
-        router.post('/push/test', {}, { preserveScroll: true });
+        router.post('/push/test', { _token: page.props.csrfToken }, { preserveScroll: true });
+      },
+      onError: () => {
+        window.alert('Kunde inte spara push-prenumerationen på servern.');
+      },
+      onFinish: () => {
+        pushState.value.busy = false;
       },
     });
   } catch (error) {
     window.alert(error.message || 'Kunde inte aktivera pushnotiser.');
-  } finally {
     pushState.value.busy = false;
   }
 }
@@ -458,13 +638,16 @@ function distanceMeters(a, b) {
 
 function toggleVisibility() {
   const nextVisibility = visibilityOnline.value ? 'offline' : 'online';
-  router.patch('/visibility', { visibility: nextVisibility }, {
+  router.patch('/visibility', { visibility: nextVisibility, _token: page.props.csrfToken }, {
     preserveScroll: true,
     onSuccess: () => {
       visibilityState.value = nextVisibility;
       if (nextVisibility === 'offline') {
         stopLocationWatch();
       }
+    },
+    onError: () => {
+      window.alert('Kunde inte uppdatera synlighet.');
     },
   });
 }
@@ -484,6 +667,7 @@ function blankOrder() {
 
 function blankUser() {
   return {
+    _token: page.props.csrfToken,
     email: '',
     firstName: '',
     lastName: '',
@@ -574,6 +758,7 @@ function openCreateUser() {
 function openEditUser(user) {
   editingUserId.value = user.id;
   userForm.defaults({
+    _token: page.props.csrfToken,
     email: user.email || '',
     firstName: user.firstName || '',
     lastName: user.lastName || '',
@@ -586,6 +771,8 @@ function openEditUser(user) {
 }
 
 function saveUser() {
+  userForm._token = page.props.csrfToken;
+
   const options = {
     preserveScroll: true,
     onSuccess: () => {
@@ -603,15 +790,20 @@ function saveUser() {
 
 function resetPassword(user) {
   if (!window.confirm(`Återställ lösenord för ${user.name || user.email}?`)) return;
-  router.patch(`/users/${encodeURIComponent(user.id)}/password`, {}, { preserveScroll: true });
+  router.patch(`/users/${encodeURIComponent(user.id)}/password`, { _token: page.props.csrfToken }, { preserveScroll: true });
 }
 
 function deleteUser(user) {
   if (!window.confirm(`Ta bort användaren ${user.name || user.email}?`)) return;
-  router.delete(`/users/${encodeURIComponent(user.id)}`, { preserveScroll: true });
+  router.delete(`/users/${encodeURIComponent(user.id)}`, {
+    data: { _token: page.props.csrfToken },
+    preserveScroll: true,
+  });
 }
 
 function saveSettings() {
+  settingsForm._token = page.props.csrfToken;
+
   settingsForm.put('/settings', {
     preserveScroll: true,
     onSuccess: () => { adminTab.value = 'settings'; },
@@ -637,6 +829,18 @@ function exportLogs() {
   link.download = `systemloggar-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function clearFrontendLogs() {
+  const currentKeys = (props.admin.logs || []).map(logRowKey);
+  if (!currentKeys.length) return;
+  if (!window.confirm('Rensa loggar från denna vy? Backendloggarna sparas och tas inte bort.')) return;
+
+  hiddenLogKeys.value = Array.from(new Set([...hiddenLogKeys.value, ...currentKeys]));
+  logSearch.value = '';
+  logStatus.value = '';
+  logModule.value = '';
+  persistHiddenLogKeys();
 }
 
 function csvValue(value) {
@@ -666,11 +870,19 @@ function formatDate(value) {
 <template>
   <Head :title="settings.appTitle" />
 
-  <div class="app-shell">
-    <header class="topbar">
-      <div>
-        <h1>{{ settings.appTitle }}</h1>
-        <div class="topbar-meta">{{ user.name || user.email }} · {{ roleLabel(user) }}</div>
+  <div class="app-shell app-shell-dashboard">
+    <header class="topbar app-header">
+      <div class="topbar-menu">
+        <Button
+          label="Meny"
+          icon="pi pi-bars"
+          severity="secondary"
+          outlined
+          aria-haspopup="true"
+          aria-controls="topbar_menu"
+          @click="toggleTopMenu"
+        />
+        <Menu id="topbar_menu" ref="topMenu" :model="topMenuItems" popup />
       </div>
       <div class="topbar-actions">
         <Button
@@ -698,7 +910,7 @@ function formatDate(value) {
       </div>
     </header>
 
-    <main class="main">
+    <main class="main app-main app-content">
       <Message v-if="flash.success" severity="success" :closable="false" class="mb-3">
         {{ flash.success }}
       </Message>
@@ -707,28 +919,28 @@ function formatDate(value) {
       </Message>
 
       <section class="stat-grid" aria-label="Översikt">
-        <div class="stat">
+        <div class="stat stat-deliveries">
           <div class="stat-icon"><i class="pi pi-box"></i></div>
           <div>
             <div class="stat-label">Leveranser</div>
             <div class="stat-value">{{ stats.ordersTotal }}</div>
           </div>
         </div>
-        <div class="stat">
+        <div class="stat stat-active">
           <div class="stat-icon"><i class="pi pi-bolt"></i></div>
           <div>
             <div class="stat-label">Aktiva</div>
             <div class="stat-value">{{ stats.activeOrders }}</div>
           </div>
         </div>
-        <div class="stat">
+        <div class="stat stat-completed">
           <div class="stat-icon"><i class="pi pi-check-circle"></i></div>
           <div>
             <div class="stat-label">Levererade</div>
             <div class="stat-value">{{ stats.deliveredOrders }}</div>
           </div>
         </div>
-        <div class="stat">
+        <div class="stat stat-users">
           <div class="stat-icon"><i class="pi pi-users"></i></div>
           <div>
             <div class="stat-label">Användare</div>
@@ -737,79 +949,131 @@ function formatDate(value) {
         </div>
       </section>
 
-      <Tabs v-model:value="activeTab">
+      <Tabs v-model:value="activeTab" class="dashboard-tabs">
         <TabList>
           <Tab value="orders">Leveranser</Tab>
+          <Tab value="purchases">Inköp</Tab>
           <Tab v-if="can('users.view')" value="users">Användare</Tab>
         </TabList>
         <TabPanels>
           <TabPanel value="orders">
+            <section class="panel deliveries-panel">
+              <div class="deliveries-panel-header">
+                <div class="toolbar-title">
+                  <span class="toolbar-marker"><i class="pi pi-truck"></i></span>
+                  <span class="toolbar-copy">
+                    <strong>Leveranser</strong>
+                    <span>Registrerade leveranser</span>
+                  </span>
+                </div>
+                <span class="toolbar-count deliveries-summary">
+                  <strong>{{ orders.length }}</strong>
+                  <span>st</span>
+                </span>
+                <Button v-if="can('deliveries.create')" class="new-delivery-button" label="Ny leverans" icon="pi pi-plus" @click="openCreateOrder" />
+              </div>
+
+              <div class="deliveries-list-wrapper">
+                <div v-if="!orders.length" class="deliveries-empty">
+                  Inga leveranser registrerade.
+                </div>
+                <div v-else class="deliveries-list">
+                  <article v-for="order in orders" :key="order.id" class="delivery-row">
+                    <div class="delivery-media">
+                      <a v-if="primaryDeliveryProduct(order)?.imageUrl" class="delivery-media-link" :href="primaryDeliveryProduct(order).imageUrl" target="_blank" rel="noopener noreferrer" title="Öppna artikelbild">
+                        <img :src="primaryDeliveryProduct(order).imageUrl" :alt="primaryDeliveryProduct(order).title || primaryDeliveryItem(order)?.artikel || order.mottagare">
+                      </a>
+                      <span v-else class="delivery-media-icon">
+                        <i class="pi pi-box"></i>
+                      </span>
+                    </div>
+
+                    <div class="delivery-main" :title="`${order.mottagare || ''} ${deliveryItemSummary(order)}`">
+                      <strong>{{ order.mottagare || 'Okänd mottagare' }}</strong>
+                    </div>
+
+                    <div class="delivery-products" :title="deliveryItemSummary(order)">
+                      {{ deliveryItemSummary(order) }}
+                    </div>
+
+                    <a v-if="phoneHref(order.tele)" class="delivery-phone delivery-link" :href="phoneHref(order.tele)" :title="order.tele">
+                      <i class="pi pi-phone"></i>
+                      <span>{{ order.tele }}</span>
+                    </a>
+                    <span v-else class="delivery-phone muted">Telefon saknas</span>
+
+                    <a v-if="mapsHref(order.adress)" class="delivery-address delivery-link" :href="mapsHref(order.adress)" target="_blank" rel="noopener noreferrer" :title="order.adress">
+                      <i class="pi pi-map-marker"></i>
+                      <span>{{ order.adress }}</span>
+                    </a>
+                    <span v-else class="delivery-address muted" :title="order.adress">{{ order.adress || 'Adress saknas' }}</span>
+
+                    <div class="delivery-date" :title="deliveryDateText(order)">
+                      <i class="pi pi-calendar"></i>
+                      <span>{{ deliveryDateText(order) }}</span>
+                    </div>
+
+                    <div class="delivery-status">
+                      <Tag :value="statusLabels[order.status] || order.status" :severity="statusSeverity(order.status)" :class="['status-badge', `status-${order.status}`]" />
+                    </div>
+
+                    <div class="delivery-actions">
+                      <a v-if="phoneHref(order.tele)" class="icon-action" :href="phoneHref(order.tele)" aria-label="Ring" title="Ring">
+                        <i class="pi pi-phone"></i>
+                      </a>
+                      <a v-if="mapsHref(order.adress)" class="icon-action" :href="mapsHref(order.adress)" target="_blank" rel="noopener noreferrer" aria-label="Öppna karta" title="Öppna karta">
+                        <i class="pi pi-map-marker"></i>
+                      </a>
+                      <Button v-if="can('deliveries.update')" icon="pi pi-pencil" text rounded aria-label="Redigera" title="Redigera" @click="openEditOrder(order)" />
+                      <Button v-if="can('deliveries.update_status')" icon="pi pi-play" text rounded severity="success" aria-label="Starta" title="Starta" @click="startOrder(order)" />
+                      <Button v-if="can('deliveries.update_status')" icon="pi pi-check" text rounded severity="secondary" aria-label="Levererad" title="Markera levererad" @click="setStatus(order, 'delivered')" />
+                      <Button v-if="can('deliveries.delete')" icon="pi pi-trash" text rounded severity="danger" aria-label="Ta bort" title="Ta bort" @click="deleteOrder(order)" />
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </section>
+          </TabPanel>
+
+          <TabPanel value="purchases">
             <section class="panel">
               <Toolbar>
                 <template #start>
-                  <strong>Leveranser</strong>
-                </template>
-                <template #end>
-                  <Button v-if="can('deliveries.create')" label="Ny leverans" icon="pi pi-plus" @click="openCreateOrder" />
+                  <div class="toolbar-title">
+                    <span class="toolbar-marker"><i class="pi pi-shopping-cart"></i></span>
+                    <span class="toolbar-copy">
+                      <strong>Inköp</strong>
+                      <span>Artiklar, bilder och lagerstatus</span>
+                    </span>
+                    <span class="toolbar-count">
+                      <strong>{{ products.length }}</strong>
+                      <span>artiklar</span>
+                    </span>
+                  </div>
                 </template>
               </Toolbar>
 
-              <DataTable :value="orders" size="small" paginator :rows="12" data-key="id" sort-field="createdAt" :sort-order="-1" responsive-layout="scroll">
-                <Column field="mottagare" header="Mottagare" sortable>
+              <DataTable :value="products" size="small" paginator :rows="12" data-key="sku" sort-field="sku" responsive-layout="scroll">
+                <Column field="sku" header="Artikel" sortable>
                   <template #body="{ data }">
-                    <div class="document-cell">
-                      <strong>{{ data.mottagare }}</strong>
-                      <span v-if="data.notes">{{ data.notes }}</span>
+                    <div class="order-product-chip purchase-product-chip">
+                      <a v-if="data.imageUrl" class="product-image-link" :href="data.imageUrl" target="_blank" rel="noopener noreferrer" title="Öppna originalbild">
+                        <img :src="data.imageUrl" :alt="data.title || data.sku">
+                      </a>
+                      <span v-else class="product-image-placeholder">{{ String(data.sku || '?').slice(0, 3).toUpperCase() }}</span>
+                      <div>
+                        <strong>{{ data.sku }}</strong>
+                        <span>{{ data.title || 'Artikel utan bild' }}</span>
+                        <small>{{ data.folder || 'lager' }} · {{ data.imageCount || 0 }} bilder</small>
+                      </div>
                     </div>
                   </template>
                 </Column>
-                <Column field="adress" header="Adress" sortable>
+                <Column field="stockTotal" header="Totalt" sortable />
+                <Column field="stockDelivered" header="Levererat" sortable />
+                <Column field="stockRemaining" header="Kvar" sortable>
                   <template #body="{ data }">
-                    <a v-if="mapsHref(data.adress)" class="cell-link" :href="mapsHref(data.adress)" target="_blank" rel="noopener noreferrer">
-                      <i class="pi pi-map-marker"></i>
-                      <span>{{ data.adress }}</span>
-                    </a>
-                    <span v-else>{{ data.adress }}</span>
-                  </template>
-                </Column>
-                <Column field="tele" header="Telefon">
-                  <template #body="{ data }">
-                    <a v-if="phoneHref(data.tele)" class="cell-link" :href="phoneHref(data.tele)">
-                      <i class="pi pi-phone"></i>
-                      <span>{{ data.tele }}</span>
-                    </a>
-                    <span v-else class="muted">Saknas</span>
-                  </template>
-                </Column>
-                <Column field="desiredDeliveryDate" header="Önskat" sortable>
-                  <template #body="{ data }">
-                    <span>{{ data.desiredDeliveryDate || '' }} {{ data.desiredDeliveryTime || '' }}</span>
-                  </template>
-                </Column>
-                <Column field="status" header="Status" sortable>
-                  <template #body="{ data }">
-                    <Tag :value="statusLabels[data.status] || data.status" :severity="statusSeverity(data.status)" />
-                  </template>
-                </Column>
-                <Column field="createdAt" header="Skapad" sortable>
-                  <template #body="{ data }">
-                    {{ formatDate(data.createdAt) }}
-                  </template>
-                </Column>
-                <Column header="" style="width: 250px">
-                  <template #body="{ data }">
-                    <div class="actions table-actions">
-                      <a v-if="phoneHref(data.tele)" class="icon-action" :href="phoneHref(data.tele)" aria-label="Ring">
-                        <i class="pi pi-phone"></i>
-                      </a>
-                      <a v-if="mapsHref(data.adress)" class="icon-action" :href="mapsHref(data.adress)" target="_blank" rel="noopener noreferrer" aria-label="Öppna karta">
-                        <i class="pi pi-map-marker"></i>
-                      </a>
-                      <Button v-if="can('deliveries.update')" icon="pi pi-pencil" text rounded aria-label="Redigera" @click="openEditOrder(data)" />
-                      <Button v-if="can('deliveries.update_status')" icon="pi pi-play" text rounded severity="success" aria-label="Starta" @click="startOrder(data)" />
-                      <Button v-if="can('deliveries.update_status')" icon="pi pi-check" text rounded severity="secondary" aria-label="Levererad" @click="setStatus(data, 'delivered')" />
-                      <Button v-if="can('deliveries.delete')" icon="pi pi-trash" text rounded severity="danger" aria-label="Ta bort" @click="deleteOrder(data)" />
-                    </div>
+                    <Tag :value="`${data.stockRemaining || 0} st`" severity="success" />
                   </template>
                 </Column>
               </DataTable>
@@ -820,7 +1084,17 @@ function formatDate(value) {
             <section class="panel">
               <Toolbar>
                 <template #start>
-                  <strong>Användare</strong>
+                  <div class="toolbar-title">
+                    <span class="toolbar-marker"><i class="pi pi-users"></i></span>
+                    <span class="toolbar-copy">
+                      <strong>Användare</strong>
+                      <span>Aktiva konton i systemet</span>
+                    </span>
+                    <span class="toolbar-count">
+                      <strong>{{ users.length }}</strong>
+                      <span>konton</span>
+                    </span>
+                  </div>
                 </template>
                 <template #end>
                   <Button v-if="can('users.create')" label="Ny användare" icon="pi pi-user-plus" @click="openCreateUser" />
@@ -860,7 +1134,7 @@ function formatDate(value) {
       </Tabs>
     </main>
 
-    <Dialog v-model:visible="orderDialog" modal :header="editingOrderId ? 'Redigera leverans' : 'Ny leverans'" :style="{ width: 'min(920px, 96vw)' }">
+    <Dialog v-model:visible="orderDialog" modal :header="editingOrderId ? 'Redigera leverans' : 'Ny leverans'" class="delivery-dialog" :style="{ width: 'min(920px, 96vw)' }">
       <form class="form-grid" @submit.prevent="saveOrder">
         <div class="field">
           <label for="mottagare">Mottagare</label>
@@ -949,11 +1223,28 @@ function formatDate(value) {
         <div class="field" style="grid-column: 1 / -1">
           <label>Artiklar</label>
           <div v-for="(item, index) in orderForm.items" :key="index" class="item-row">
-            <InputText v-model="item.artikel" placeholder="Artikel" />
+            <div class="item-article-cell">
+              <InputText v-model="item.artikel" placeholder="Artikel" list="product-suggestions" />
+              <div v-if="productForItem(item)" class="product-preview">
+                <a v-if="productForItem(item).imageUrl" class="product-image-link" :href="productForItem(item).imageUrl" target="_blank" rel="noopener noreferrer" title="Öppna originalbild">
+                  <img :src="productForItem(item).imageUrl" :alt="productForItem(item).title || productForItem(item).sku">
+                </a>
+                <div>
+                  <strong>{{ productForItem(item).sku }}</strong>
+                  <span>{{ productForItem(item).title }}</span>
+                  <small>Lager {{ productForItem(item).stockRemaining }} kvar av {{ productForItem(item).stockTotal }}</small>
+                </div>
+              </div>
+            </div>
             <InputText v-model="item.antal" placeholder="Antal" />
             <InputText v-model="item.workOrderNumber" placeholder="Arbetsorder" />
             <Button type="button" icon="pi pi-times" text rounded severity="danger" @click="removeItem(index)" />
           </div>
+          <datalist id="product-suggestions">
+            <option v-for="product in products" :key="product.sku" :value="product.sku">
+              {{ product.title }}
+            </option>
+          </datalist>
           <Button type="button" label="Lägg till rad" icon="pi pi-plus" severity="secondary" outlined @click="addItem" />
         </div>
       </form>
@@ -964,7 +1255,7 @@ function formatDate(value) {
       </template>
     </Dialog>
 
-    <Dialog v-model:visible="userDialog" modal :header="editingUserId ? 'Redigera användare' : 'Ny användare'" :style="{ width: 'min(720px, 96vw)' }">
+    <Dialog v-model:visible="userDialog" modal :header="editingUserId ? 'Redigera användare' : 'Ny användare'" class="form-dialog" :style="{ width: 'min(720px, 96vw)' }">
       <form class="form-grid" @submit.prevent="saveUser">
         <div class="field">
           <label for="firstName">Förnamn</label>
@@ -1004,7 +1295,6 @@ function formatDate(value) {
     <Dialog v-model:visible="settingsDialog" modal header="Adminpanel" class="admin-dialog" :style="{ width: 'min(1180px, 96vw)' }">
       <Tabs v-model:value="adminTab" class="admin-tabs">
         <TabList>
-          <Tab value="overview">Översikt</Tab>
           <Tab v-if="can('users.view')" value="users">Användare</Tab>
           <Tab v-if="can('roles.view')" value="roles">Roller</Tab>
           <Tab v-if="can('deliveries.view_all')" value="deliveries">Leveranser</Tab>
@@ -1012,53 +1302,25 @@ function formatDate(value) {
           <Tab v-if="can('logs.view')" value="logs">Loggar</Tab>
           <Tab v-if="can('settings.view')" value="settings">Inställningar</Tab>
           <Tab v-if="can('system.view_status')" value="system">System</Tab>
+          <Tab value="overview">Översikt</Tab>
         </TabList>
 
         <TabPanels>
-          <TabPanel value="overview">
-            <section class="admin-grid">
-              <article class="admin-card">
-                <span>Leveranser</span>
-                <strong>{{ stats.ordersTotal }}</strong>
-                <small>{{ stats.activeOrders }} aktiva</small>
-              </article>
-              <article class="admin-card">
-                <span>Användare</span>
-                <strong>{{ stats.usersTotal }}</strong>
-                <small>{{ admin.drivers?.length || 0 }} förare</small>
-              </article>
-              <article class="admin-card">
-                <span>Pushnotiser</span>
-                <strong>{{ admin.pushSubscriptions?.length || 0 }}</strong>
-                <small>{{ settings.allowPushNotifications ? 'Aktiverat' : 'Avstängt' }}</small>
-              </article>
-              <article class="admin-card">
-                <span>Tracking-länkar</span>
-                <strong>{{ admin.trackingLinks?.length || 0 }}</strong>
-                <small>Senaste 100</small>
-              </article>
-            </section>
-
-            <section class="admin-section">
-              <h3>Backendöversikt</h3>
-              <DataTable :value="admin.apiEndpoints" size="small" responsive-layout="scroll">
-                <Column field="method" header="Metod" />
-                <Column field="path" header="Endpoint" />
-                <Column field="module" header="Modul" />
-                <Column field="status" header="Status">
-                  <template #body="{ data }">
-                    <Tag :value="data.status" severity="success" />
-                  </template>
-                </Column>
-              </DataTable>
-            </section>
-          </TabPanel>
-
           <TabPanel v-if="can('users.view')" value="users">
             <section class="panel admin-panel">
               <Toolbar>
                 <template #start>
-                  <strong>Användarhantering</strong>
+                  <div class="toolbar-title">
+                    <span class="toolbar-marker"><i class="pi pi-shield"></i></span>
+                    <span class="toolbar-copy">
+                      <strong>Användarhantering</strong>
+                      <span>Skapa, ändra roller och hantera åtkomst</span>
+                    </span>
+                    <span class="toolbar-count">
+                      <strong>{{ users.length }}</strong>
+                      <span>konton</span>
+                    </span>
+                  </div>
                 </template>
                 <template #end>
                   <Button v-if="can('users.create')" label="Ny användare" icon="pi pi-user-plus" @click="openCreateUser" />
@@ -1124,7 +1386,7 @@ function formatDate(value) {
                 <Column field="tele" header="Telefon" />
                 <Column field="status" header="Status" sortable>
                   <template #body="{ data }">
-                    <Tag :value="statusLabels[data.status] || data.status" :severity="statusSeverity(data.status)" />
+                    <Tag :value="statusLabels[data.status] || data.status" :severity="statusSeverity(data.status)" :class="['status-badge', `status-${data.status}`]" />
                   </template>
                 </Column>
                 <Column field="createdAt" header="Skapad" sortable>
@@ -1148,6 +1410,11 @@ function formatDate(value) {
                 <Column field="recipientName" header="Mottagare" sortable />
                 <Column field="deliveryAddress" header="Adress" />
                 <Column field="status" header="Status" sortable />
+                <Column field="deliveredQuantity" header="Avbockat" sortable>
+                  <template #body="{ data }">
+                    <Tag :value="`${data.deliveredQuantity || 0} st`" severity="success" />
+                  </template>
+                </Column>
                 <Column field="receivedAt" header="Mottagen" sortable>
                   <template #body="{ data }">{{ formatDate(data.receivedAt) }}</template>
                 </Column>
@@ -1159,13 +1426,19 @@ function formatDate(value) {
             <section class="admin-section">
               <div class="admin-section-head">
                 <h3>Systemloggar</h3>
-                <Button v-if="can('logs.export')" label="Exportera" icon="pi pi-download" severity="secondary" outlined @click="exportLogs" />
+                <div class="log-actions">
+                  <Button v-if="can('logs.export')" label="Exportera" icon="pi pi-download" severity="secondary" outlined @click="exportLogs" />
+                  <Button label="Rensa alla loggar" icon="pi pi-trash" severity="danger" outlined :disabled="!visibleAdminLogs.length" @click="clearFrontendLogs" />
+                </div>
               </div>
               <div class="log-filters">
                 <InputText v-model="logSearch" placeholder="Sök i loggar" />
                 <Select v-model="logModule" :options="logModuleOptions" option-label="label" option-value="value" placeholder="Modul" show-clear />
                 <Select v-model="logStatus" :options="logStatusOptions" option-label="label" option-value="value" placeholder="Status" show-clear />
               </div>
+              <Message v-if="hiddenLogCount" severity="info" :closable="false" class="mb-3">
+                {{ hiddenLogCount }} loggar är rensade från denna vy. Backendloggarna finns kvar och nya förekomster visas igen.
+              </Message>
               <DataTable :value="filteredLogs" size="small" paginator :rows="12" responsive-layout="scroll">
                 <Column field="time" header="Datum/tid" sortable />
                 <Column field="user" header="Användare" sortable />
@@ -1271,10 +1544,14 @@ function formatDate(value) {
               <article class="admin-section">
                 <h3>Artiklar</h3>
                 <DataTable :value="admin.articles" size="small" :rows="5" responsive-layout="scroll">
-                  <Column field="artikel" header="Artikel" />
-                  <Column field="usageCount" header="Antal rader" />
-                  <Column field="updatedAt" header="Senast använd">
-                    <template #body="{ data }">{{ formatDate(data.updatedAt) }}</template>
+                  <Column field="sku" header="Artikel" />
+                  <Column field="title" header="Benämning" />
+                  <Column field="stockTotal" header="Totalt" />
+                  <Column field="stockDelivered" header="Levererat" />
+                  <Column field="stockRemaining" header="Kvar">
+                    <template #body="{ data }">
+                      <Tag :value="`${data.stockRemaining || 0} st`" severity="success" />
+                    </template>
                   </Column>
                 </DataTable>
               </article>
@@ -1301,6 +1578,45 @@ function formatDate(value) {
                   </Column>
                 </DataTable>
               </article>
+            </section>
+          </TabPanel>
+
+          <TabPanel value="overview">
+            <section class="admin-grid">
+              <article class="admin-card">
+                <span>Leveranser</span>
+                <strong>{{ stats.ordersTotal }}</strong>
+                <small>{{ stats.activeOrders }} aktiva</small>
+              </article>
+              <article class="admin-card">
+                <span>Användare</span>
+                <strong>{{ stats.usersTotal }}</strong>
+                <small>{{ admin.drivers?.length || 0 }} förare</small>
+              </article>
+              <article class="admin-card">
+                <span>Pushnotiser</span>
+                <strong>{{ admin.pushSubscriptions?.length || 0 }}</strong>
+                <small>{{ settings.allowPushNotifications ? 'Aktiverat' : 'Avstängt' }}</small>
+              </article>
+              <article class="admin-card">
+                <span>Tracking-länkar</span>
+                <strong>{{ admin.trackingLinks?.length || 0 }}</strong>
+                <small>Senaste 100</small>
+              </article>
+            </section>
+
+            <section class="admin-section">
+              <h3>Backendöversikt</h3>
+              <DataTable :value="admin.apiEndpoints" size="small" responsive-layout="scroll">
+                <Column field="method" header="Metod" />
+                <Column field="path" header="Endpoint" />
+                <Column field="module" header="Modul" />
+                <Column field="status" header="Status">
+                  <template #body="{ data }">
+                    <Tag :value="data.status" severity="success" />
+                  </template>
+                </Column>
+              </DataTable>
             </section>
           </TabPanel>
         </TabPanels>
