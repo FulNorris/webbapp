@@ -5,7 +5,7 @@ Detta är en intern Laravel 12-applikation där Laravel sköter routing, session
 ## Ingår
 
 - Laravel 12-applikation med webbrutter i `routes/web.php`
-- Inertia + Vue 3 + PrimeVue för intern inloggning, dashboard, leveranser, användare, inställningar och tracking-sidor
+- Inertia + Vue 3 + PrimeVue för intern inloggning, dashboard, leve-ranser, användare, inställningar och tracking-sidor
 - Livewire + Laravel Reverb för livekartan på `/live-map`
 - Web Push med VAPID-nycklar och service worker på `/sw.js`
 - Sessionbaserad auth med Laravel CSRF-skydd
@@ -13,7 +13,6 @@ Detta är en intern Laravel 12-applikation där Laravel sköter routing, session
 - PHP-controller för auth, användare, admin, leveranser, förare, spårning, push-subscriptions och externa arbetsordrar
 - Databasmigrationer för users, orders, order_items, settings, people, tracking_links, push_subscriptions och external_work_orders
 - Seeder med första admin-konto
-- Originalkällor sparade i `resources/original/`
 - Dokumentation sparad i `docs/`
 
 ## Starta lokalt
@@ -43,10 +42,32 @@ Byt lösenord direkt efter första inloggning.
 2. Kör `composer install --no-dev --optimize-autoloader` och `npm install`.
 3. Kör `npm run build`.
 4. Kör `php artisan migrate --force`.
-5. Peka webbserverns document root till `public/`.
-6. Proxy:a `/app/` till Reverb (`127.0.0.1:8080`) med WebSocket Upgrade headers.
-7. Kör `stuckbema-reverb.service` eller motsvarande process för `php artisan reverb:start`.
-8. Aktivera HTTPS/Cloudflare för geolocation, service worker, WebSockets och push.
+5. Kör `php artisan stuckbema:import-arbetsordrar` när intern arbetsorderdata ska importeras.
+6. Peka webbserverns document root till `public/`.
+7. Proxy:a `/app/` till Reverb (`127.0.0.1:8080`) med WebSocket Upgrade headers.
+8. Kör `stuckbema-reverb.service` eller motsvarande process för `php artisan reverb:start`.
+9. Aktivera HTTPS/Cloudflare för geolocation, service worker, WebSockets och push.
+
+## Interna arbetsordrar
+
+Arbetsorderdata sparas normaliserat i PostgreSQL:
+
+- `arbetsordrar` innehåller en post per internt arbetsordernummer.
+- `arbetsorder_resurser` innehåller fasta resurser per arbetsorder.
+- `arbetsorder_rader` innehåller artikelrader från arbetsbeskrivningen.
+- Befintliga `orders` och `order_items` används fortsatt som leveranser och leveransrader. `order_items` har kopplingar till `arbetsordrar` och `arbetsorder_rader`.
+
+Importera eller uppdatera arbetsordrar:
+
+```bash
+php artisan migrate
+php artisan stuckbema:import-arbetsordrar
+php artisan test
+```
+
+Kommandot läser standardfilen `database/seeders/data/arbetsordrar.txt`. Det är idempotent: befintlig arbetsorder uppdateras på `arbetsorder_nr`, och rader/resurser för samma arbetsorder raderas och återskapas vid import.
+
+Leveransformulärets fält `Arbetsorder` sparas på leveransraden. När ett arbetsordernummer och en artikel anges försöker backend koppla raden till rätt arbetsorderrad och beräknar beställt, tidigare levererat, levererat totalt och kvar att leverera. Om artikeln inte matchar sparas leveransraden ändå med varningen `Artikeln hittades inte på arbetsordern`.
 
 ### Serverkrav
 

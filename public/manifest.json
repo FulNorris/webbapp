@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Stuckbema Leverans",
+  "short_name": "Leverans",
+  "description": "Internt system for leveranser, inkop, livekarta och pushnotiser.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b91822",
+  "lang": "sv",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

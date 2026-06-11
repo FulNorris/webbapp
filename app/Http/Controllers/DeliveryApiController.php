@@ -4,15 +4,25 @@ namespace App\Http\Controllers;
 
 use App\Events\DriverVisibilityUpdated;
 use App\Events\LocationUpdated;
+use App\Services\ArbetsorderParser;
+use App\Services\DeliveryOrderItemService;
+use App\Services\LeveransKalkylService;
+use App\Services\ProductResolver;
+use App\Services\SystemHealthService;
+use App\Services\WorkOrderArticleService;
 use App\Services\WebPushNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class DeliveryApiController extends Controller
 {
+    private const PROTECTED_ADMIN_EMAIL = 'admin@stuckbema.se';
+
     private array $roles = ['firmatecknare', 'admin', 'arbetsledare', 'personal', 'support', 'forare', 'viewer', 'kund'];
 
     private array $roleAliases = [
@@ -273,11 +283,36 @@ class DeliveryApiController extends Controller
 
     private function guardUserMutation($actor, $target, ?string $newRole = null): void
     {
+        abort_if($this->isProtectedAdminUser($target) && ! $this->canSeeProtectedAdmin($actor), 404);
+
         $actorIsFirmatecknare = $this->hasPermission($actor, 'system.full_access');
         $targetIsFirmatecknare = $this->normalizedRole($target->role ?? null) === 'firmatecknare';
         $newRoleIsFirmatecknare = $newRole === 'firmatecknare';
 
         abort_if(($targetIsFirmatecknare || $newRoleIsFirmatecknare) && ! $actorIsFirmatecknare, 403, 'Endast firmatecknare får ändra firmatecknare.');
+    }
+
+    private function visibleUsersQuery(?object $viewer)
+    {
+        return DB::table('users')
+            ->when(! $this->canSeeProtectedAdmin($viewer), function ($query) {
+                $query->whereRaw('lower(email) <> ?', [self::PROTECTED_ADMIN_EMAIL]);
+            });
+    }
+
+    private function canSeeProtectedAdmin(?object $viewer): bool
+    {
+        return $this->isProtectedAdminUser($viewer);
+    }
+
+    private function isProtectedAdminUser(?object $user): bool
+    {
+        return $this->isProtectedAdminEmail($user->email ?? null);
+    }
+
+    private function isProtectedAdminEmail(?string $email): bool
+    {
+        return strtolower(trim((string) $email)) === self::PROTECTED_ADMIN_EMAIL;
     }
 
     private function guardOrderAccess($user, $order): void
@@ -323,6 +358,131 @@ class DeliveryApiController extends Controller
         ];
     }
 
+    private function productForArticle(?string $article): ?object
+    {
+        return app(ProductResolver::class)->forArticle($article);
+    }
+
+    private function quantityValue($value): int
+    {
+        if (preg_match('/\d+(?:[,.]\d+)?/', (string) $value, $matches)) {
+            return max(0, (int) ceil((float) str_replace(',', '.', $matches[0])));
+        }
+
+        return 0;
+    }
+
+    private function existingOrderItemColumns(array $columns): array
+    {
+        return collect($columns)
+            ->filter(fn ($value, string $column) => Schema::hasColumn('order_items', $column))
+            ->all();
+    }
+
+    private function imageUrl(?string $imagePath): ?string
+    {
+        $imagePath = trim((string) $imagePath);
+        $base = rtrim(str_replace('\\', '/', base_path('produkter')), '/').'/';
+        $path = str_replace('\\', '/', $imagePath);
+        if ($imagePath === '' || ! str_starts_with($path, $base)) {
+            return null;
+        }
+
+        return '/produkter/'.implode('/', array_map('rawurlencode', explode('/', substr($path, strlen($base)))));
+    }
+
+    private function markOrderItemsDelivered(string $orderId, object $user): int
+    {
+        return DB::table('order_items')
+            ->where('order_id', $orderId)
+            ->pluck('id')
+            ->sum(fn ($itemId) => $this->markOrderItemDelivered((int) $itemId, $user));
+    }
+
+    private function markOrderItemDelivered(int $itemId, object $user, $quantity = null): int
+    {
+        return DB::transaction(function () use ($itemId, $user, $quantity) {
+            $item = DB::table('order_items')->where('id', $itemId)->lockForUpdate()->first();
+            if (! $item) {
+                return 0;
+            }
+
+            $requested = max(1, (int) ($item->requested_quantity ?? $this->quantityValue($item->antal)));
+            $current = (int) ($item->delivered_quantity ?? $this->quantityValue($item->delivered_antal ?? 0));
+            $quantityToDeliver = $quantity !== null && $quantity !== ''
+                ? max(1, $this->quantityValue($quantity))
+                : max(0, $requested - $current);
+            $target = min($requested, $current + $quantityToDeliver);
+            $delta = max(0, $target - $current);
+            if ($delta === 0) {
+                return 0;
+            }
+
+            $itemProductSku = ($item->product_sku ?? null) ?: null;
+            $product = $this->productForArticle($itemProductSku ?: $item->artikel);
+            $productSku = $product?->sku ?: $itemProductSku;
+
+            DB::table('order_items')->where('id', $itemId)->update([
+                'product_sku' => $productSku,
+                'product_title' => $product?->title,
+                'product_image_path' => $product?->primary_image_path,
+                'requested_quantity' => $requested,
+                'delivered_quantity' => $target,
+                'remaining_quantity' => max(0, $requested - $target),
+                'delivered_antal' => (string) $target,
+                'delivered_at' => now(),
+                'updated_at' => now(),
+                ...$this->existingOrderItemColumns([
+                    'levererat_antal' => $target,
+                ]),
+            ]);
+
+            if ($productSku && Schema::hasTable('products')) {
+                $lockedProduct = DB::table('products')->where('sku', $productSku)->lockForUpdate()->first();
+                if ($lockedProduct) {
+                    $stockDelivered = max(0, (int) $lockedProduct->stock_delivered + $delta);
+                    $stockTotal = max(0, (int) $lockedProduct->stock_total);
+                    DB::table('products')->where('sku', $productSku)->update([
+                        'stock_delivered' => $stockDelivered,
+                        'stock_available' => max(0, $stockTotal - $stockDelivered),
+                        'updated_at' => now(),
+                    ]);
+
+                    if (Schema::hasTable('stock_movements')) {
+                        DB::table('stock_movements')->insert([
+                            'product_sku' => $productSku,
+                            'order_id' => $item->order_id,
+                            'order_item_id' => $itemId,
+                            'work_order_number' => $item->work_order_number,
+                            'quantity_delta' => -$delta,
+                            'type' => 'delivered',
+                            'created_by' => $user->id,
+                            'payload' => json_encode(['artikel' => $item->artikel, 'delivered' => $delta]),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+            }
+
+            if ($item->work_order_number && Schema::hasTable('work_order_delivery_events')) {
+                DB::table('work_order_delivery_events')->insert([
+                    'id' => 'evt_'.Str::uuid(),
+                    'work_order_number' => $item->work_order_number,
+                    'order_id' => $item->order_id,
+                    'item_index' => (int) ($item->sort_order ?? 0),
+                    'artikel' => $item->artikel,
+                    'delivered_antal' => (string) $delta,
+                    'delivered_by' => $user->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            return $delta;
+        });
+    }
+
     private function orderRow($row)
     {
         if (! $row) {
@@ -334,19 +494,44 @@ class DeliveryApiController extends Controller
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
-            ->map(fn ($item) => [
-                'id' => $item->id,
-                'artikel' => $item->artikel,
-                'article' => ($item->article ?? null) ?: $item->artikel,
-                'benamning' => $item->benamning ?? null,
-                'description' => ($item->description ?? null) ?: ($item->benamning ?? null) ?: $item->artikel,
-                'antal' => $item->antal,
-                'quantity' => ($item->quantity ?? null) ?: $item->antal,
-                'workOrderNumber' => $item->work_order_number,
-                'deliveredAntal' => $item->delivered_antal,
-                'deliveredAt' => $item->delivered_at,
-                'payload' => $this->decodeJson($item->payload ?? null, new \stdClass()),
-            ])
+            ->map(function ($item) use ($row) {
+                $product = $this->productForArticle(($item->product_sku ?? null) ?: $item->artikel);
+                $requestedQuantity = (int) ($item->requested_quantity ?? $this->quantityValue($item->antal));
+                $deliveredQuantity = (int) ($item->delivered_quantity ?? $this->quantityValue($item->delivered_antal ?? 0));
+                $calculation = app(LeveransKalkylService::class)->calculationForItem($item, $row->id);
+
+                return [
+                    'id' => $item->id,
+                    'artikel' => $item->artikel,
+                    'article' => ($item->article ?? null) ?: $item->artikel,
+                    'benamning' => $item->benamning ?? null,
+                    'description' => ($item->description ?? null) ?: ($item->benamning ?? null) ?: $item->artikel,
+                    'antal' => $item->antal,
+                    'quantity' => ($item->quantity ?? null) ?: $item->antal,
+                    'enhet' => $item->enhet ?? null,
+                    'artikelNormalized' => $item->artikel_normalized ?? ArbetsorderParser::normalizeArticle($item->artikel),
+                    'workOrderNumber' => $item->arbetsorder_nr ?? $item->work_order_number,
+                    'workOrderArticleId' => $item->arbetsorder_rad_id ?? null,
+                    'workOrderMatchStatus' => $item->match_status ?? $calculation['match_status'],
+                    'workOrderMatchWarning' => $item->match_warning ?? $calculation['match_warning'],
+                    'workOrderCalculation' => $calculation,
+                    'deliveredAntal' => $item->delivered_antal ?? null,
+                    'deliveredAt' => $item->delivered_at ?? null,
+                    'requestedQuantity' => $requestedQuantity,
+                    'deliveredQuantity' => $deliveredQuantity,
+                    'remainingQuantity' => max(0, $requestedQuantity - $deliveredQuantity),
+                    'deliveredComplete' => $requestedQuantity > 0 && $deliveredQuantity >= $requestedQuantity,
+                    'product' => $product ? [
+                        'sku' => $product->sku,
+                        'title' => $product->title,
+                        'imageUrl' => $product->primary_image_url ?: $this->imageUrl($product->primary_image_path),
+                        'stockTotal' => (int) $product->stock_total,
+                        'stockDelivered' => (int) $product->stock_delivered,
+                        'stockRemaining' => max(0, (int) $product->stock_total - (int) $product->stock_delivered),
+                    ] : null,
+                    'payload' => $this->decodeJson($item->payload ?? null, new \stdClass()),
+                ];
+            })
             ->values();
 
         $address = $row->adress ?? $row->delivery_address ?? null;
@@ -423,6 +608,32 @@ class DeliveryApiController extends Controller
         ];
     }
 
+    private function userLocationPayload(?object $user, bool $trackingEnabled = true): array
+    {
+        if (! $user) {
+            return ['trackingEnabled' => false];
+        }
+
+        $location = $this->decodeJson($user->current_location ?? null, []);
+        $driverName = trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: ($user->email ?? 'Förare');
+
+        return [
+            'type' => 'driver',
+            'orderId' => 'driver-'.$user->id,
+            'driverId' => $user->id,
+            'driverName' => $driverName,
+            'recipientName' => $driverName,
+            'deliveryAddress' => 'Synlig online',
+            'lat' => isset($location['lat']) ? (float) $location['lat'] : (isset($location['latitude']) ? (float) $location['latitude'] : null),
+            'lng' => isset($location['lng']) ? (float) $location['lng'] : (isset($location['longitude']) ? (float) $location['longitude'] : null),
+            'accuracy' => $location['accuracy'] ?? null,
+            'speed' => $location['speed'] ?? null,
+            'heading' => $location['heading'] ?? null,
+            'trackingEnabled' => $trackingEnabled && ($user->visibility ?? 'offline') === 'online',
+            'updatedAt' => $location['updatedAt'] ?? $user->location_updated_at ?? now()->toIso8601String(),
+        ];
+    }
+
     private function settingsRow(): array
     {
         $settings = DB::table('system_settings')->where('id', 1)->first();
@@ -464,7 +675,7 @@ class DeliveryApiController extends Controller
         return ! preg_match('/\b(test|codex|example|demo)\b/i', $ascii);
     }
 
-    private function recipientRows(?string $query = null): array
+    private function recipientRows(?string $query = null, ?object $viewer = null): array
     {
         $addressByName = DB::table('orders')
             ->whereNotNull('mottagare')
@@ -487,6 +698,9 @@ class DeliveryApiController extends Controller
 
         DB::table('users')
             ->where('active', true)
+            ->when(! $this->canSeeProtectedAdmin($viewer), function ($query) {
+                $query->whereRaw('lower(email) <> ?', [self::PROTECTED_ADMIN_EMAIL]);
+            })
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get(['id', 'first_name', 'last_name', 'phone', 'email', 'role', 'updated_at'])
@@ -598,11 +812,11 @@ class DeliveryApiController extends Controller
         return $rows;
     }
 
-    private function fieldSearch(string $field, string $query, bool $driversOnly = false): array
+    private function fieldSearch(string $field, string $query, bool $driversOnly = false, ?object $viewer = null): array
     {
         $field = in_array($field, ['name', 'email', 'phone', 'driver'], true) ? $field : 'name';
         if ($field === 'name' && ! $driversOnly) {
-            return $this->recipientRows($query);
+            return $this->recipientRows($query, $viewer);
         }
 
         $like = '%'.strtolower(trim($query)).'%';
@@ -629,6 +843,10 @@ class DeliveryApiController extends Controller
             [$param]
         );
 
+        if (! $this->canSeeProtectedAdmin($viewer)) {
+            $rows = array_values(array_filter($rows, fn ($row) => ! $this->isProtectedAdminEmail($row->email ?? null)));
+        }
+
         return array_map(function ($row) use ($field) {
             $value = match ($field) {
                 'email' => $row->email,
@@ -652,9 +870,11 @@ class DeliveryApiController extends Controller
         }, $rows);
     }
 
-    public function health()
+    public function health(SystemHealthService $health)
     {
-        return $this->json(['ok' => true, 'service' => 'laravel', 'time' => now()->toIso8601String()]);
+        $report = $health->report();
+
+        return $this->json($report, $report['ok'] ? 200 : 503);
     }
 
     public function login(Request $request)
@@ -803,9 +1023,15 @@ class DeliveryApiController extends Controller
 
     public function users(Request $request)
     {
-        $this->requirePermission($request, 'users.view');
+        $actor = $this->requirePermission($request, 'users.view');
 
-        return $this->json(DB::table('users')->orderByDesc('created_at')->get()->map(fn ($user) => $this->publicUser($user)));
+        return $this->json(
+            $this->visibleUsersQuery($actor)
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn ($user) => $this->publicUser($user))
+                ->values()
+        );
     }
 
     public function createUser(Request $request)
@@ -955,8 +1181,11 @@ class DeliveryApiController extends Controller
 
     public function adminSummary(Request $request)
     {
-        $this->requirePermission($request, 'system.view_status');
-        $roles = DB::table('users')->select('role', DB::raw('count(*) as count'))->groupBy('role')->pluck('count', 'role');
+        $actor = $this->requirePermission($request, 'system.view_status');
+        $visibleUsers = $this->visibleUsersQuery($actor);
+        $roles = (clone $visibleUsers)->select('role', DB::raw('count(*) as count'))->groupBy('role')->pluck('count', 'role');
+        $userCount = (clone $visibleUsers)->count();
+        $activeUserCount = (clone $visibleUsers)->where('active', true)->count();
         $statuses = collect(DB::select("
             select normalized_status as status, count(*) as count
             from (
@@ -973,12 +1202,12 @@ class DeliveryApiController extends Controller
         "))->pluck('count', 'status');
 
         return $this->json([
-            'users' => DB::table('users')->count(),
+            'users' => $userCount,
             'orders' => $statuses,
             'settings' => $this->settingsRow(),
             'counts' => [
-                'users' => DB::table('users')->count(),
-                'activeUsers' => DB::table('users')->where('active', true)->count(),
+                'users' => $userCount,
+                'activeUsers' => $activeUserCount,
                 'roles' => $roles,
                 'orders' => $statuses,
                 'orderTotal' => DB::table('orders')->count(),
@@ -1018,19 +1247,47 @@ class DeliveryApiController extends Controller
 
     public function recipients(Request $request)
     {
-        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
+        $actor = $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
 
         return $this->json([
             'type' => 'recipients',
-            'results' => $this->recipientRows($request->query('q', '')),
+            'results' => $this->recipientRows($request->query('q', ''), $actor),
+        ]);
+    }
+
+    public function products(Request $request)
+    {
+        $this->requireAnyPermission($request, ['articles.view', 'deliveries.create', 'deliveries.update', 'work_orders.view']);
+        if (! Schema::hasTable('products')) {
+            return $this->json(['results' => []]);
+        }
+
+        $query = mb_strtolower(trim((string) $request->query('q', '')), 'UTF-8');
+
+        return $this->json([
+            'results' => DB::table('products')
+                ->when($query !== '', fn ($builder) => $builder->whereRaw('lower(sku) like ? or lower(title) like ?', ["%{$query}%", "%{$query}%"]))
+                ->orderBy('sku')
+                ->limit(300)
+                ->get()
+                ->map(fn ($row) => [
+                    'sku' => $row->sku,
+                    'title' => $row->title,
+                    'imageUrl' => $row->primary_image_url ?: $this->imageUrl($row->primary_image_path),
+                    'imageCount' => (int) $row->image_count,
+                    'stockTotal' => (int) $row->stock_total,
+                    'stockDelivered' => (int) $row->stock_delivered,
+                    'stockRemaining' => max(0, (int) $row->stock_total - (int) $row->stock_delivered),
+                ])
+                ->values(),
         ]);
     }
 
     public function recipientPhone(Request $request)
     {
-        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
+        $actor = $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
         $name = $request->query('name', $request->query('q', ''));
-        $match = collect($this->recipientRows($name))
+        $match = collect($this->recipientRows($name, $actor))
             ->first(fn (array $row) => $this->recipientKey($row['name']) === $this->recipientKey($name));
 
         return $this->json([
@@ -1042,34 +1299,34 @@ class DeliveryApiController extends Controller
 
     public function drivers(Request $request)
     {
-        $this->requireAnyPermission($request, ['drivers.view', 'deliveries.assign_driver']);
+        $actor = $this->requireAnyPermission($request, ['drivers.view', 'deliveries.assign_driver']);
 
-        return $this->json($this->fieldSearch('driver', $request->query('q', ''), true));
+        return $this->json($this->fieldSearch('driver', $request->query('q', ''), true, $actor));
     }
 
     public function searchPeople(Request $request)
     {
-        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
+        $actor = $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
         $field = $request->query('field', 'name');
-        $results = $this->fieldSearch($field, $request->query('q', ''));
+        $results = $this->fieldSearch($field, $request->query('q', ''), false, $actor);
 
         return $this->json(['type' => $field, 'results' => $results]);
     }
 
     public function suggest(Request $request, $field)
     {
-        $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
+        $actor = $this->requireAnyPermission($request, ['customers.view', 'deliveries.create', 'deliveries.update']);
         $type = ['names' => 'name', 'emails' => 'email', 'phones' => 'phone'][$field] ?? 'name';
-        $results = $this->fieldSearch($type, $request->query('q', ''));
+        $results = $this->fieldSearch($type, $request->query('q', ''), false, $actor);
 
         return $this->json(['type' => $type, 'results' => $results]);
     }
 
     public function searchDrivers(Request $request)
     {
-        $this->requireAnyPermission($request, ['drivers.view', 'deliveries.assign_driver']);
+        $actor = $this->requireAnyPermission($request, ['drivers.view', 'deliveries.assign_driver']);
 
-        return $this->json(['type' => 'driver', 'results' => $this->fieldSearch('driver', $request->query('q', ''), true)]);
+        return $this->json(['type' => 'driver', 'results' => $this->fieldSearch('driver', $request->query('q', ''), true, $actor)]);
     }
 
     public function driverVisibility(Request $request)
@@ -1084,39 +1341,89 @@ class DeliveryApiController extends Controller
         ]);
 
         $updatedUser = DB::table('users')->where('id', $user->id)->first();
-        DriverVisibilityUpdated::dispatch([
-            'driverId' => $updatedUser->id,
-            'driverName' => trim(($updatedUser->first_name ?? '').' '.($updatedUser->last_name ?? '')) ?: $updatedUser->email,
+        if ($updatedUser) {
+            DriverVisibilityUpdated::dispatch([
+                'driverId' => $updatedUser->id,
+                'driverName' => trim(($updatedUser->first_name ?? '').' '.($updatedUser->last_name ?? '')) ?: $updatedUser->email,
+                'visibility' => $visibility,
+                'lastSeenAt' => now()->toIso8601String(),
+            ]);
+        }
+
+        if ($visibility === 'offline') {
+            $orders = DB::table('orders')
+                ->where('driver_id', $user->id)
+                ->where('tracking_enabled', true)
+                ->get();
+
+            DB::table('orders')->whereIn('id', $orders->pluck('id'))->update([
+                'tracking_enabled' => false,
+                'last_stopped_at' => now(),
+                'updated_by' => $user->id,
+                'updated_at' => now(),
+            ]);
+            DB::table('tracking_links')->whereIn('order_id', $orders->pluck('id'))->update(['active' => false, 'updated_at' => now()]);
+
+            foreach ($orders as $order) {
+                $order->tracking_enabled = false;
+                LocationUpdated::dispatch($this->locationPayload($order));
+            }
+        }
+
+        return $this->json([
+            'success' => true,
             'visibility' => $visibility,
-            'lastSeenAt' => now()->toIso8601String(),
+            'driverId' => $updatedUser?->id,
+            'user' => $this->publicUser($updatedUser),
+        ]);
+    }
+
+    public function driverLocation(Request $request)
+    {
+        $user = $this->requireUser($request);
+        if (($user->visibility ?? 'offline') !== 'online') {
+            return $this->json(['error' => 'Synlighet måste vara Online.'], 409);
+        }
+
+        $data = $request->validate([
+            'lat' => ['required_without:latitude', 'numeric', 'between:-90,90'],
+            'latitude' => ['required_without:lat', 'numeric', 'between:-90,90'],
+            'lng' => ['required_without:longitude', 'numeric', 'between:-180,180'],
+            'longitude' => ['required_without:lng', 'numeric', 'between:-180,180'],
+            'accuracy' => ['nullable', 'numeric'],
+            'speed' => ['nullable', 'numeric'],
+            'heading' => ['nullable', 'numeric'],
         ]);
 
-        return $this->json(['success' => true, 'visibility' => $visibility, 'user' => $this->publicUser($updatedUser)]);
+        $lat = (float) ($data['lat'] ?? $data['latitude']);
+        $lng = (float) ($data['lng'] ?? $data['longitude']);
+        $location = [
+            'lat' => $lat,
+            'lng' => $lng,
+            'latitude' => $lat,
+            'longitude' => $lng,
+            'accuracy' => $data['accuracy'] ?? null,
+            'speed' => $data['speed'] ?? null,
+            'heading' => $data['heading'] ?? null,
+            'updatedAt' => now()->toIso8601String(),
+        ];
+
+        DB::table('users')->where('id', $user->id)->update([
+            'current_location' => json_encode($location),
+            'location_updated_at' => now(),
+            'last_seen_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $updatedUser = DB::table('users')->where('id', $user->id)->first();
+        LocationUpdated::dispatch($this->userLocationPayload($updatedUser, true));
+
+        return $this->json(['success' => true, 'location' => $location]);
     }
 
     private function saveItems($orderId, $items): void
     {
-        DB::table('order_items')->where('order_id', $orderId)->delete();
-
-        foreach (array_values($items ?: []) as $index => $item) {
-            $article = (string) ($item['artikel'] ?? $item['article'] ?? $item['model'] ?? '');
-            $quantity = (string) ($item['antal'] ?? $item['quantity'] ?? '');
-
-            DB::table('order_items')->insert([
-                'order_id' => $orderId,
-                'artikel' => $article,
-                'article' => $item['article'] ?? $article,
-                'benamning' => $item['benamning'] ?? $item['description'] ?? null,
-                'description' => $item['description'] ?? $item['benamning'] ?? $article,
-                'antal' => $quantity,
-                'quantity' => $item['quantity'] ?? $quantity,
-                'sort_order' => $index,
-                'work_order_number' => $item['workOrderNumber'] ?? $item['work_order_number'] ?? null,
-                'payload' => json_encode($item),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+        app(DeliveryOrderItemService::class)->replace((string) $orderId, $items ?: [], 'api');
     }
 
     private function orderInput(Request $request, $id = null): array
@@ -1181,14 +1488,17 @@ class DeliveryApiController extends Controller
         $data['updated_by'] = $user->id;
         $data['created_at'] = now();
 
-        DB::table('orders')->insert($data);
-
         $items = $request->input('items', []);
         if (! count($items)) {
             $items = [['artikel' => $request->input('artikel', $request->input('model', '')), 'antal' => $request->input('antal', '')]];
         }
 
-        $this->saveItems($data['id'], $items);
+        DB::transaction(function () use ($data, $items) {
+            DB::table('orders')->insert($data);
+            $this->saveItems($data['id'], $items);
+        });
+
+        $this->notifyDeliveryCreated($data['id']);
 
         return $this->json($this->orderRow(DB::table('orders')->where('id', $data['id'])->first()), 201);
     }
@@ -1200,11 +1510,13 @@ class DeliveryApiController extends Controller
         unset($data['id']);
         $data['updated_by'] = $user->id;
 
-        DB::table('orders')->where('id', $id)->update($data);
+        DB::transaction(function () use ($data, $id, $request) {
+            DB::table('orders')->where('id', $id)->update($data);
 
-        if ($request->has('items')) {
-            $this->saveItems($id, $request->input('items', []));
-        }
+            if ($request->has('items')) {
+                $this->saveItems($id, $request->input('items', []));
+            }
+        });
 
         return $this->json($this->orderRow(DB::table('orders')->where('id', $id)->first()));
     }
@@ -1281,6 +1593,7 @@ class DeliveryApiController extends Controller
             'updated_at' => now(),
         ]);
         DB::table('tracking_links')->where('order_id', $id)->update(['active' => false, 'updated_at' => now()]);
+        $this->markOrderItemsDelivered($id, $user);
 
         $order = DB::table('orders')->where('id', $id)->first();
         LocationUpdated::dispatch($this->locationPayload($order));
@@ -1384,12 +1697,76 @@ class DeliveryApiController extends Controller
         $this->requirePermission($request, 'work_orders.view');
         $query = strtolower($request->query('q', ''));
 
-        return $this->json(DB::table('external_work_orders')
-            ->select('work_order_number')
-            ->when($query, fn ($builder) => $builder->whereRaw('lower(work_order_number) like ?', ["%{$query}%"]))
+        $table = Schema::hasTable('arbetsordrar') ? 'arbetsordrar' : 'external_work_orders';
+        $column = $table === 'arbetsordrar' ? 'arbetsorder_nr' : 'work_order_number';
+
+        return $this->json(DB::table($table)
+            ->select($column)
+            ->when($query, fn ($builder) => $builder->whereRaw("cast({$column} as text) like ?", ["%{$query}%"]))
+            ->when(Schema::hasColumn($table, 'hidden_at'), fn ($builder) => $builder->whereNull('hidden_at'))
             ->orderByDesc('updated_at')
             ->limit(20)
-            ->pluck('work_order_number'));
+            ->pluck($column));
+    }
+
+    public function internalWorkOrder(Request $request, int $arbetsorderNr)
+    {
+        $this->requireAnyPermission($request, ['work_orders.view', 'deliveries.create', 'deliveries.update']);
+        $orderQuery = DB::table('arbetsordrar')->where('arbetsorder_nr', $arbetsorderNr);
+        if (Schema::hasColumn('arbetsordrar', 'hidden_at')) {
+            $orderQuery->whereNull('hidden_at');
+        }
+
+        $order = $orderQuery->first();
+
+        if (! $order) {
+            return $this->json(['found' => false, 'message' => 'Arbetsordern hittades inte.'], 404);
+        }
+
+        $rows = DB::table('arbetsorder_rader')
+            ->where('arbetsorder_id', $order->id)
+            ->orderBy('rad_nr')
+            ->orderBy('id')
+            ->get();
+        $article = trim((string) $request->query('artikel', ''));
+        $match = $article !== ''
+            ? app(LeveransKalkylService::class)->matchArbetsorderRad($arbetsorderNr, $article)
+            : null;
+
+        return $this->json([
+            'found' => true,
+            'arbetsorder' => [
+                'id' => $order->id,
+                'arbetsorderNr' => $order->arbetsorder_nr,
+                'kontaktperson' => $order->kontaktperson,
+                'telefon' => $order->telefon,
+                'arbetsplats' => $order->arbetsplats,
+                'postadress' => $order->postadress,
+            ],
+            'rows' => $rows->map(fn ($row) => [
+                'id' => $row->id,
+                'artikel' => $row->artikel,
+                'artikelNormalized' => $row->artikel_normalized,
+                'antal' => $row->antal === null ? null : (float) $row->antal,
+                'enhet' => $row->enhet,
+                'rawLine' => $row->raw_line,
+            ])->values(),
+            'match' => $match ? [
+                'id' => $match->id,
+                'artikel' => $match->artikel,
+                'artikelNormalized' => $match->artikel_normalized,
+                'antal' => $match->antal === null ? null : (float) $match->antal,
+                'enhet' => $match->enhet,
+                'rawLine' => $match->raw_line,
+            ] : null,
+        ]);
+    }
+
+    public function workOrderArticles(Request $request, int $arbetsorderNr, WorkOrderArticleService $service)
+    {
+        $this->requireAnyPermission($request, ['work_orders.view', 'deliveries.create', 'deliveries.update']);
+
+        return $this->json($service->responseFor($arbetsorderNr));
     }
 
     public function externalWorkOrders(Request $request)
@@ -1508,7 +1885,13 @@ class DeliveryApiController extends Controller
     {
         $this->requireUser($request);
 
-        return $this->json(['publicKey' => env('VAPID_PUBLIC_KEY'), 'enabled' => ! empty(env('VAPID_PUBLIC_KEY'))]);
+        $notifier = app(WebPushNotifier::class);
+
+        return $this->json([
+            'publicKey' => config('services.webpush.public_key'),
+            'configured' => $notifier->configured(),
+            'enabled' => $notifier->enabled(),
+        ]);
     }
 
     public function pushSubscribe(Request $request)
@@ -1519,21 +1902,43 @@ class DeliveryApiController extends Controller
             return $this->json(['error' => 'endpoint saknas'], 400);
         }
 
+        $p256dh = $request->input('keys.p256dh', $request->input('subscription.keys.p256dh', ''));
+        $auth = $request->input('keys.auth', $request->input('subscription.keys.auth', ''));
+        if ($p256dh === '' || $auth === '') {
+            return $this->json(['error' => 'push-nycklar saknas'], 422);
+        }
+
+        $existingSubscription = DB::table('push_subscriptions')->where('endpoint', $endpoint)->first();
+        $subscriptionId = $request->input('id') ?: $existingSubscription?->id ?: 'psh_'.Str::uuid();
+
         DB::table('push_subscriptions')->updateOrInsert(['endpoint' => $endpoint], [
-            'id' => $request->input('id', 'psh_'.Str::uuid()),
+            'id' => $subscriptionId,
             'user_id' => $user->id,
             'platform' => 'web',
             'provider' => 'webpush',
-            'p256dh' => $request->input('keys.p256dh', $request->input('subscription.keys.p256dh', '')),
-            'auth' => $request->input('keys.auth', $request->input('subscription.keys.auth', '')),
+            'p256dh' => $p256dh,
+            'auth' => $auth,
+            'permission' => $request->input('permission'),
+            'user_agent' => $request->input('userAgent', $request->userAgent()),
             'payload' => json_encode($request->all()),
             'enabled' => true,
+            'failure_count' => 0,
+            'revoked_at' => null,
             'last_seen_at' => now(),
             'updated_at' => now(),
             'created_at' => now(),
         ]);
 
-        return $this->json(['success' => true]);
+        $result = app(WebPushNotifier::class)->sendToUsers([$user->id], [
+            'notification' => [
+                'title' => 'Pushnotiser aktiva',
+                'body' => 'Den här enheten kan nu ta emot leveransnotiser.',
+                'tag' => 'push-enabled',
+            ],
+            'data' => ['url' => '/'],
+        ]);
+
+        return $this->json(['success' => true, 'subscriptionId' => $subscriptionId, 'result' => $result]);
     }
 
     public function pushDelete(Request $request)
@@ -1574,5 +1979,37 @@ class DeliveryApiController extends Controller
         ]);
 
         return $this->json(['success' => true, 'message' => 'Push-test skickad', 'result' => $result]);
+    }
+
+    private function notifyDeliveryCreated(string $orderId): void
+    {
+        try {
+            $order = DB::table('orders')->where('id', $orderId)->first();
+            if (! $order) {
+                return;
+            }
+
+            $recipient = Str::of((string) ($order->mottagare ?: $order->recipient_name ?: 'Ny leverans'))->squish()->toString();
+            $address = Str::of((string) ($order->adress ?: $order->delivery_address ?: ''))->squish()->toString();
+            $body = $address !== '' ? "{$recipient} - {$address}" : $recipient;
+
+            app(WebPushNotifier::class)->sendToAllActive([
+                'notification' => [
+                    'title' => 'Ny leverans',
+                    'body' => $body,
+                    'tag' => 'delivery-created-'.$order->id,
+                ],
+                'data' => [
+                    'url' => '/',
+                    'type' => 'delivery-created',
+                    'orderId' => $order->id,
+                ],
+            ]);
+        } catch (\Throwable $exception) {
+            Log::warning('Pushnotis för ny leverans kunde inte skickas.', [
+                'order_id' => $orderId,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 }

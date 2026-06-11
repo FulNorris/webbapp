@@ -23,27 +23,42 @@ self.addEventListener('push', (event) => {
 
   const notification = data.notification || data;
   const extraData = data.data || data;
+  const tag = notification.tag || extraData.tag || 'stuckbema-leverans';
 
   event.waitUntil(self.registration.showNotification(notification.title || fallback.title, {
     body: notification.body || fallback.body,
     icon: '/icons/icon-192.png',
     badge: '/icons/apple-touch-icon-180.png',
-    tag: notification.tag || extraData.tag || 'stuckbema-leverans',
+    tag,
+    renotify: tag !== 'stuckbema-leverans',
+    requireInteraction: Boolean(notification.requireInteraction || extraData.requireInteraction),
+    timestamp: Date.now(),
     data: {
       url: extraData.url || '/',
       orderId: extraData.orderId || '',
+      purchaseId: extraData.purchaseId || '',
+      type: extraData.type || '',
     },
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  let targetUrl = '/';
+  try {
+    const requestedUrl = new URL(event.notification.data?.url || '/', self.location.origin);
+    if (requestedUrl.origin === self.location.origin) {
+      targetUrl = requestedUrl.href;
+    }
+  } catch {
+    targetUrl = '/';
+  }
 
   event.waitUntil((async () => {
     const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windows) {
-      if ('focus' in client) {
+      const clientUrl = new URL(client.url);
+      if (clientUrl.origin === self.location.origin && 'focus' in client) {
         await client.focus();
         if ('navigate' in client) {
           return client.navigate(targetUrl);

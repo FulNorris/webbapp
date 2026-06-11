@@ -12,7 +12,7 @@ class WebPushNotifier
 {
     public function configured(): bool
     {
-        return filled(env('VAPID_PUBLIC_KEY')) && filled(env('VAPID_PRIVATE_KEY'));
+        return filled(config('services.webpush.public_key')) && filled(config('services.webpush.private_key'));
     }
 
     public function enabled(): bool
@@ -53,6 +53,27 @@ class WebPushNotifier
         return $this->sendToUsers($userIds, $message);
     }
 
+    public function sendToAllActive(array $message): array
+    {
+        if (! $this->enabled()) {
+            return ['sent' => 0, 'failed' => 0, 'expired' => 0];
+        }
+
+        $subscriptions = DB::table('push_subscriptions')
+            ->leftJoin('users', 'users.id', '=', 'push_subscriptions.user_id')
+            ->where('push_subscriptions.enabled', true)
+            ->whereNull('push_subscriptions.revoked_at')
+            ->where(function ($query) {
+                $query->whereNull('users.id')
+                    ->orWhere('users.active', true);
+            })
+            ->get([
+                'push_subscriptions.*',
+            ]);
+
+        return $this->send($subscriptions, $message);
+    }
+
     private function send(iterable $subscriptions, array $message): array
     {
         if (! $this->enabled()) {
@@ -63,9 +84,9 @@ class WebPushNotifier
             $payload = json_encode($message, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
             $webPush = new WebPush([
                 'VAPID' => [
-                    'subject' => env('VAPID_SUBJECT', 'mailto:no-reply@example.test'),
-                    'publicKey' => env('VAPID_PUBLIC_KEY'),
-                    'privateKey' => env('VAPID_PRIVATE_KEY'),
+                    'subject' => config('services.webpush.subject', 'mailto:no-reply@example.test'),
+                    'publicKey' => config('services.webpush.public_key'),
+                    'privateKey' => config('services.webpush.private_key'),
                 ],
             ], [
                 'TTL' => 3600,

@@ -1,0 +1,827 @@
+Block 1
+Intern arbetsorder
+Utskriftsdatum: 2026-04-27
+Intern arbetsorder nr: 112514
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Dominik Siek, 0736156390
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Jerzy Siek, 0735695051
+Layth Thameen Abbo Naqqar, 0735942820
+Handläggare: Daniel Hillman
+Färdig datum: 2026-05-08
+Ordernr: 112514
+Projekt: 202081
+Startdatum: Måndag 2026-04-27
+Kontaktperson: Magnus Johansson
+Telefon: 070-377 75 25
+Arbetsplats: Tyrgatan 4 (1206 Bathroom)
+Postadress: 114 27 Stockholm
+Arbetsbeskrivning:
+Takrosett till 1206 Bathroom:
+Justera mitten för koppen dia 160mm.
+Ev extra profil runt i kring för att få den större.
+Flytta djuren så de passar efter koppen i mitten.
+Handskrivet:
+Ø 450
+
+Block 2
+Intern arbetsorder
+Utskriftsdatum: 2026-04-[delvis dolt]
+Intern arbetsorder nr: 112525
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-08
+Ordernr: 112525
+Projekt: 202375
+Startdatum: Tisdag 2026-04-28
+Kontaktperson: Kontantnota swishbetalning
+Telefon: xx
+Arbetsplats: Karlavägen 24
+Postadress: 114 31 Stockholm
+Arbetsbeskrivning:
+2 x R105
+
+Block 3
+Intern arbetsorder
+Utskriftsdatum: 2026-05-11
+Intern arbetsorder nr: 112574
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-22
+Ordernr: 112574
+Projekt: 202392
+Startdatum: Måndag 2026-05-11
+Kontaktperson: Fredric Trygg
+Telefon: xx
+Arbetsplats: Karlavägen 24
+Postadress: 114 31 Stockholm
+Arbetsbeskrivning:
+1 x Rp70
+1 x R64
+
+Block 4
+Intern arbetsorder
+Utskriftsdatum: 2026-04-20
+Intern arbetsorder nr: 112444
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-04-27
+Ordernr: 112444
+Projekt: 202349
+Startdatum: Onsdag 2026-04-01
+Kontaktperson: Martina Nordberg
+Telefon: 073-6247724
+Arbetsplats: Rydetvägen 83
+Postadress: 439 35 Onsala
+Arbetsbeskrivning:
+Tillverka R1 och dela den på mitten, taket har en vinkel på 30 grader, kan ni ordna så att det blir lätt för kunden att montera med denna vinkel?
+Ska packas och skickas till kund, lägg med en liten påse gips.
+Handritad skiss finns längst ner.
+
+Block 5
+Intern arbetsorder
+Utskriftsdatum: 2026-05-19
+Intern arbetsorder nr: 112587
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-21
+Ordernr: 112587
+Projekt: 202082
+Startdatum: Tisdag 2026-05-19
+Kontaktperson: Sommarsång Fastigheter AB
+Telefon: Inget telefonnummer registrerat
+Arbetsplats: Tyrgatan 5
+Postadress: 114 27 Stockholm
+Arbetsbeskrivning:
+1 x R40
+2 x R34
+
+Block 6
+Intern arbetsorder
+Utskriftsdatum: 2026-04-23
+Intern arbetsorder nr: 112508
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-18
+Ordernr: 112508
+Projekt: 202368
+Startdatum: Onsdag 2026-04-22
+Kontaktperson: Andreas Wannerwall
+Telefon: 070 763 97 68
+Arbetsplats: Sturegatan 40
+Postadress: 114 36 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+44 lpm SL12
+8 x Nlp12 (nytt namn SLH12)
+8 kvartar (lite mer av SL12) med innerradie 470 mm
+14 lpm SL26
+4 x Nlp26 (nytt namn SLH26)
+2 x D2 återkommer med längd
+2 x R5 (diam 640 mm)
+Handskrivet:
+LAGER UPPE
+1390 mm, 1150 mm
+
+Block 7
+Intern arbetsorder
+Utskriftsdatum: 2026-03-16
+Intern arbetsorder nr: 112371
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa, 0702595876
+Hani Awad, 0765356676
+Monem Khaldi, 0709747025
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-03-23
+Ordernr: 112371
+Projekt: 202082
+Startdatum: Måndag 2026-03-16
+Kontaktperson: Sommarsång Fastigheter AB
+Telefon: Inget telefonnummer registrerat
+Arbetsplats: Tyrgatan 5
+Postadress: 114 27 Stockholm
+Arbetsbeskrivning:
+50 lpm SL27
+8 hörn Nlp27
+2 x R7
+1 x R83
+Handskrivet:
+12L 23/3
+à 588 mm
+monem RETUSCH
+
+Block 8
+Intern arbetsorder
+Utskriftsdatum: [delvis dolt]
+Intern arbetsorder nr: 112582
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-21
+Ordernr: 112582
+Projekt: 202394
+Startdatum: Onsdag 2026-05-13
+Kontaktperson: Birch & Wood AB
+Telefon: xx
+Arbetsplats: Karlavägen 24
+Postadress: 114 31 Stockholm
+Arbetsbeskrivning:
+2 x Rp7, 415 mm
+
+Block 9
+Intern arbetsorder
+Utskriftsdatum: 2026-05-06
+Intern arbetsorder nr: 112560
+Fasta resurser
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-20
+Ordernr: 112560
+Projekt: 202386
+Startdatum: Onsdag 2026-05-06
+Kontaktperson: Anna-Maria Goltsis
+Telefon: xx
+Arbetsplats: Upplandsgatan 47
+Postadress: 113 28 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+1 x D6 längd 1470 mm
+
+Block 10
+Intern arbetsorder
+Utskriftsdatum: 2026-04-24
+Intern arbetsorder nr: 112512
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-11
+Ordernr: 112512
+Projekt: 202370
+Startdatum: Fredag 2026-04-24
+Kontaktperson: Nicole Rehnström
+Telefon: xx
+Arbetsplats: Zenithgatan 3 lgh 1001
+Postadress: 21214 Malmö
+Arbetsbeskrivning:
+Tillverka 14 lpm TL11B
++ halv säck gips och halv säck colle
+leverans på pall till kund:
+Nicole Rehnström
+0722707023
+Zenithgatan 3
+21214 Malmö
+
+Block 11
+Intern arbetsorder
+Utskriftsdatum: 2026-05-12
+Intern arbetsorder nr: 112576
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-25
+Ordernr: 112576
+Projekt: 202302
+Startdatum: Måndag 2026-05-11
+Kontaktperson: Frakka AB
+Telefon: 08-223390
+Arbetsplats: Slottsvägen 8B
+Postadress: 182 68 Djursholm
+Arbetsbeskrivning:
+2 lpm av profilen 80 x 80 med hålkäl (som en produkt)
+Finns den klar på verkstaden? eller måste vi tillverka?
+
+Block 12
+Intern arbetsorder
+Utskriftsdatum: 2026-03-18
+Intern arbetsorder nr: 112384
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-04-[handskrivet: 14]
+Ordernr: 112384
+Projekt: 202332
+Startdatum: Onsdag 2026-03-18
+Kontaktperson: Philip Lindén
+Telefon: xx
+Arbetsplats: Tulegatan 25A
+Postadress: 113 53 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+13 lpm TL104 + 3 lpm kornischvinkel
+1 x R12
+22 lpm TL48 + 5 lpm kornischvinkel
+1 x D21 (återkommer med mått)
+Handskrivet:
+12 m levererat + kornisch
+1 m levererat
+1250
+
+Block 13
+Intern arbetsorder
+Utskriftsdatum: 2026-04-30
+Intern arbetsorder nr: 112546
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-18
+Ordernr: 112546
+Projekt: 202378
+Startdatum: Torsdag 2026-04-30
+Kontaktperson: Felix Brodén
+Telefon: xx
+Arbetsplats: Kronobergsgatan 6 lgh 1202
+Postadress: 11233 Stockholm
+Arbetsbeskrivning:
+7 lpm taklist (gammal form samma motiv som takrosett R69)
+troligtvis leverans till kund, återkommer
+
+Block 14
+Intern arbetsorder
+Utskriftsdatum: 2026-03-27
+Intern arbetsorder nr: 112419
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Dominik Siek, 0736156390
+Francis Wooremaa, 0702595876
+Hani Awad, 0765356676
+Layth Thameen Abbo Naqqar, 0735942820
+KOPIA
+Handläggare: Daniel Hillman
+Färdig datum: 2026-04-03
+Ordernr: 112419
+Projekt: 202081
+Startdatum: Fredag 2026-03-27
+Kontaktperson: Magnus Johansson
+Telefon: 070-377 75 25
+Arbetsplats: Tyrgatan 4 (Stuck Plan 11)
+Postadress: 114 27 Stockholm
+Arbetsbeskrivning:
+Tillverkning Plan 11:
+“Hålkäl” enligt skiss x 40lpm
+
+Block 15
+Intern arbetsorder
+Utskriftsdatum: 2026-04-15
+Intern arbetsorder nr: 112485
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-04-28
+Ordernr: 112485
+Projekt: 202360
+Startdatum: Onsdag 2026-04-15
+Kontaktperson: Vega Måleri AB
+Telefon: 08-294080
+Arbetsplats: Engelbrektsgatan 13
+Postadress: 114 32 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+10 lpm taklist TLx (jag skickar bild)
+3 x R79
+25 lpm TL121
+26 lpm TL11B
+Handskrivet:
+2256
+20 lpm
+10 LPM + 66 RUM
+46 TOT
+
+Block 16
+Intern arbetsorder
+Utskriftsdatum: 2026-03-20
+Intern arbetsorder nr: 112396
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa, 0702595876
+Hani Awad, 0765356676
+Monem Khaldi, 0709747025
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-04-06
+Ordernr: 112396
+Projekt: 202337
+Startdatum: Fredag 2026-03-20
+Kontaktperson: Klings Bygg & Snickeri AB
+Telefon: xx
+Arbetsplats: Strandvägen 49
+Postadress: 115 23 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+13 lpm [överstruket/ändrat]
+17 lpm TL110 (finns på verkstaden?)
+21 lpm TL78A (finns på verkstaden?)
+1 x R94
+Handskrivet:
+kund ändrat till TL110
+lager
+12 à 118 cm
+17 à 93 cm
+21 à 162 cm
+→ 110
+
+Block 17
+Intern arbetsorder
+Utskriftsdatum: 2026-04-20
+Intern arbetsorder nr: 112465
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-04-20
+Ordernr: 112465
+Projekt: 202356
+Startdatum: Måndag 2026-04-20
+Kontaktperson: Tommy
+Telefon: 070-8724701
+Arbetsplats: Stureplan 15
+Postadress: 111 45 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+21 lpm TL72
+1 x R80
+4 hörn TL29
+14 lpm TL29 den släta + 5 lpm kornischvinkel
+1 x R1
+22 lpm TL63 + 4 lpm kornischvinkel
+1 x R72
+1 x R24
+Handskrivet:
+L 10 st
+6,5 lpm h
+
+Block 18
+Intern arbetsorder
+Utskriftsdatum: 2026-05-08
+Intern arbetsorder nr: 112572
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handskrivet:
+PRIO 2
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-28
+Ordernr: 112572
+Projekt: 202391
+Startdatum: Fredag 2026-05-08
+Kontaktperson: Janne
+Telefon: 0768934129
+Arbetsplats: Eriksbergsgatan 14
+Postadress: 114 30 Stockholm
+Arbetsbeskrivning:
+Tillverka
+132 lpm spegellist efter profil, 70 mm
+91 lpm hålkäl (250 x 250 mm) ska spacklas ut mot noll
+Handskrivet:
+PRIO 1
+
+Block 19
+Intern arbetsorder
+Utskriftsdatum: 2026-03-25
+Intern arbetsorder nr: 112408
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-04-[handskrivet: 26]
+Ordernr: 112408
+Projekt: 202302
+Startdatum: Onsdag 2026-03-25
+Kontaktperson: Frakka AB
+Telefon: 08-223390
+Arbetsplats: Slottsvägen 8B
+Postadress: 182 68 Djursholm
+Arbetsbeskrivning:
+21 lpm TIp2 (26/3, ska finnas på lager)
+44 lpm TIp2
+8 lpm i radie, återkommer med mått
+
+Block 20
+Intern arbetsorder
+Utskriftsdatum: 2026-04-30
+Intern arbetsorder nr: 112547
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-18
+Ordernr: 112547
+Projekt: 202379
+Startdatum: Torsdag 2026-04-30
+Kontaktperson: Charlotte Rylme
+Telefon: xx
+Arbetsplats: Grevgatan 9 lgh 1201
+Postadress: 11453 Stockholm
+Arbetsbeskrivning:
+3 x dörröverstycke D1 i längderna 1100 mm, 1460 mm och 3140 mm
+
+Block 21
+Intern arbetsorder
+Utskriftsdatum: 2026-05-21
+Intern arbetsorder nr: 112595
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handskrivet:
+PRIO 3
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-28
+Ordernr: 112595
+Projekt: 202379
+Startdatum: Torsdag 2026-05-21
+Kontaktperson: Charlotte Rylme
+Arbetsplats: Grevgatan 9 lgh 1201
+Postadress: 11453 Stockholm
+Arbetsbeskrivning:
+1 x R1
+
+Block 22
+Intern arbetsorder
+Utskriftsdatum: 2026-04-27
+Intern arbetsorder nr: 112518
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handskrivet:
+PRIO 1
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-11
+Ordernr: 112518
+Projekt: 202373
+Startdatum: Måndag 2026-04-27
+Kontaktperson: Ricard
+Telefon: 0730-78 83 59
+Arbetsplats: Norrlandsgatan 23
+Postadress: 111 43 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+38 lpm TL76
+19 lpm TL93
+36 lpm TL78 (prio 1)
+18 lpm TL145
+1 x R87
+2 x R94 (prio 1)
+1 x R18
+Handskrivet:
+PRIO 1
+19,6 lev.
+8 m lev.
+12 lpm lev + 16 tot
+
+Block 23
+Intern arbetsorder
+Utskriftsdatum: 2026-04-20
+Intern arbetsorder nr: 112499
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Dominik Siek, 0736156390
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Jerzy Siek, 0735695051
+KOPIA
+Handläggare: Daniel Hillman
+Färdig datum: 2026-05-07
+Ordernr: 112499
+Projekt: 202365
+Startdatum: Måndag 2026-04-20
+Kontaktperson: Lars Claesson
+Telefon: 0707609606
+Arbetsplats: Sturegatan 32
+Postadress: 114 36 Stockholm
+Arbetsbeskrivning:
+Tillverkning taklist enligt mall:
+Raka bitar 13M.
+Radier enligt senare mallar.
+
+Block 24
+Intern arbetsorder
+Utskriftsdatum: 2026-03-09
+Intern arbetsorder nr: 112341
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Dominik Siek, 0736156390
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-03-23
+Ordernr: 112341
+Projekt: 202097
+Startdatum: Måndag 2026-03-09
+Kontaktperson: Komponent Byggen i Stockholm AB
+Telefon: 08996540
+Arbetsplats: Burevägen 27
+Postadress: 182 63 Djursholm
+Arbetsbeskrivning:
+Tillverka
+3 x rosett 250 mm i diameter
+1 x rosett 350 mm i diameter
+schablener ska sparas ritning ska godkännas innan produktion.
+Handskrivet:
+prov senast
+VÄNTAR PÅ SVAR!
+
+Block 25
+Intern arbetsorder
+Utskriftsdatum: 2026-05-20
+Intern arbetsorder nr: 112592
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-06-01
+Ordernr: 112592
+Projekt: 202368
+Startdatum: Onsdag 2026-05-20
+Kontaktperson: Andreas Wannerwall
+Arbetsplats: Sturegatan 40
+Postadress: 114 36 Stockholm
+Arbetsbeskrivning:
+9 lpm SL12
+4 x SLH12
+1 x R5
+
+Block 26
+Intern arbetsorder
+Utskriftsdatum: 2026-04-[delvis dolt]
+Intern arbetsorder nr: 112511
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-06-01
+Ordernr: 112511
+Projekt: 202369
+Startdatum: Torsdag 2026-04-23
+Kontaktperson: Elin Lindell
+Telefon: 070-8752394
+Arbetsplats: Rörstrandsgatan 38
+Postadress: 113 40 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+prio 1:
+1 x R6
+17 lpm TL51
+prio 2:
+36 lpm TL19
+1 x R40
+
+Block 27
+Intern arbetsorder
+Utskriftsdatum: 2026-05-13
+Intern arbetsorder nr: 112583
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-29
+Ordernr: 112583
+Projekt: 202302
+Startdatum: Onsdag 2026-05-13
+Kontaktperson: Frakka AB
+Telefon: 08-223390
+Arbetsplats: Slottsvägen 8B
+Postadress: 182 68 Djursholm
+Arbetsbeskrivning:
+40 lpm spegellist klassisk 50 mm
+
+Block 28
+Intern arbetsorder
+Utskriftsdatum: 2026-05-21
+Intern arbetsorder nr: 112598
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-06-01
+Ordernr: 112598
+Projekt: 202373
+Startdatum: Torsdag 2026-05-21
+Kontaktperson: MVB Öst AB
+Arbetsplats: Norrlandsgatan 23
+Postadress: 111 43 Stockholm
+Arbetsbeskrivning:
+1 x R118
+
+Block 29
+Intern arbetsorder
+Utskriftsdatum: 2026-05-21
+Intern arbetsorder nr: 112596
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-06-01
+Ordernr: 112596
+Projekt: 202373
+Startdatum: Torsdag 2026-05-21
+Kontaktperson: MVB Öst AB
+Arbetsplats: Norrlandsgatan 23
+Postadress: 111 43 Stockholm
+Arbetsbeskrivning:
+41 lpm TL76
+2 x R18
+1 x R8
+
+Block 30
+Intern arbetsorder
+Utskriftsdatum: 2026-05-08
+Intern arbetsorder nr: 112426
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-06-01
+Ordernr: 112426
+Projekt: 202308
+Startdatum: Fredag 2026-05-08
+Kontaktperson: Apartment Service Stockholm AB
+Telefon: 07083133266
+Arbetsplats: Torstenssonsgatan 6
+Postadress: 114 57 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+23 lpm taklist (jag skickar en bild till Francis)
+
+Block 31
+Intern arbetsorder
+Utskriftsdatum: 2026-05-12
+Intern arbetsorder nr: 112581
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-06-01
+Ordernr: 112581
+Projekt: 202372
+Startdatum: Tisdag 2026-05-12
+Kontaktperson: Nife Entreprenad AB
+Arbetsplats: Nybrogatan 73
+Postadress: 114 40 Stockholm
+Arbetsbeskrivning:
+2 x R25
+2 x R106
+
+Block 32
+Intern arbetsorder
+Utskriftsdatum: 2026-05-20
+Intern arbetsorder nr: 112591
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-28
+Ordernr: 112591
+Projekt: 202399
+Startdatum: Onsdag 2026-05-20
+Kontaktperson: Kontantnota swishbetalning
+Telefon: xx
+Arbetsplats: Karlavägen 24
+Postadress: 114 31 Stockholm
+Arbetsbeskrivning:
+1 x R11B
+1 x R11A
+
+Block 33
+Intern arbetsorder
+Utskriftsdatum: 2026-05-06
+Intern arbetsorder nr: 112557
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+KOPIA
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-25
+Ordernr: 112557
+Projekt: 202384
+Startdatum: Onsdag 2026-05-06
+Kontaktperson: Per Henrik Lewander
+Telefon: xx
+Arbetsplats: Grevgatan 4
+Postadress: 114 53 Stockholm
+Arbetsbeskrivning:
+Tillverka:
+25 lpm TL76
+1 x R18
+1500 mm kornischvinkel
+3 kg silikon till smetform
+
+Block 34
+Intern arbetsorder
+Utskriftsdatum: 2026-05-08
+Intern arbetsorder nr: 112569
+Fasta resurser
+Conny Rosén, 073-423 54 90
+Francis Wooremaa Myy, 0702595876
+Hani Awad, 0765356676
+Handläggare: Juliette Marchesini
+Färdig datum: 2026-05-[handskrivet/otydligt]
+Handskrivet:
+PRIO 2
+Ordernr: 112569
+Projekt: 202389
+Startdatum: Fredag 2026-05-08
+Kontaktperson: Retsloff Snickeri AB
+Telefon: Inget telefonnummer registrerat
+Arbetsplats: Strandvägen 49
+Postadress: 115 23 Stockholm
+Arbetsbeskrivning:
+Tillverka en bättre smetform på denna, endast silikon. (Vi behöver tillverka en liten bit i radie)
+Janne lämnar en bit taklist på verkstaden den 11/5

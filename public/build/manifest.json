@@ -1,7 +1,75 @@
 {
-  "_app-CKP5LDsl.css": {
-    "file": "assets/app-CKP5LDsl.css",
-    "src": "_app-CKP5LDsl.css"
+  "_app-DA4HjqP1.css": {
+    "file": "assets/app-DA4HjqP1.css",
+    "src": "_app-DA4HjqP1.css"
+  },
+  "_primevue-core-CEUhVme8.js": {
+    "file": "assets/primevue-core-CEUhVme8.js",
+    "name": "primevue-core"
+  },
+  "_primevue-overlays-DuTXVMzT.js": {
+    "file": "assets/primevue-overlays-DuTXVMzT.js",
+    "name": "primevue-overlays",
+    "imports": [
+      "_primevue-core-CEUhVme8.js"
+    ]
+  },
+  "_primevue-table-HN9Q1o8s.js": {
+    "file": "assets/primevue-table-HN9Q1o8s.js",
+    "name": "primevue-table",
+    "imports": [
+      "_primevue-core-CEUhVme8.js"
+    ]
+  },
+  "_primevue-theme-C2iXBRLY.css": {
+    "file": "assets/primevue-theme-C2iXBRLY.css",
+    "src": "_primevue-theme-C2iXBRLY.css"
+  },
+  "_primevue-theme-DR8wQEkI.js": {
+    "file": "assets/primevue-theme-DR8wQEkI.js",
+    "name": "primevue-theme",
+    "css": [
+      "assets/primevue-theme-C2iXBRLY.css"
+    ],
+    "assets": [
+      "assets/primeicons-DMOk5skT.eot",
+      "assets/primeicons-C6QP2o4f.woff2",
+      "assets/primeicons-WjwUDZjB.woff",
+      "assets/primeicons-MpK4pl85.ttf",
+      "assets/primeicons-Dr5RGzOO.svg"
+    ]
+  },
+  "_realtime-map-1DTFk8zz.css": {
+    "file": "assets/realtime-map-1DTFk8zz.css",
+    "src": "_realtime-map-1DTFk8zz.css"
+  },
+  "_realtime-map-C3iavgvM.js": {
+    "file": "assets/realtime-map-C3iavgvM.js",
+    "name": "realtime-map",
+    "imports": [
+      "_rolldown-runtime-Bh1tDfsg.js"
+    ],
+    "css": [
+      "assets/realtime-map-1DTFk8zz.css"
+    ],
+    "assets": [
+      "assets/marker-icon-2x-_ZA0WGCc.png",
+      "assets/marker-icon-hN30_KVU.png",
+      "assets/marker-shadow-f7SaPCxT.png",
+      "assets/layers-BWBAp2CZ.png",
+      "assets/layers-2x-Bpkbi35X.png"
+    ]
+  },
+  "_rolldown-runtime-Bh1tDfsg.js": {
+    "file": "assets/rolldown-runtime-Bh1tDfsg.js",
+    "name": "rolldown-runtime"
+  },
+  "_vue-inertia-BW-flMNH.js": {
+    "file": "assets/vue-inertia-BW-flMNH.js",
+    "name": "vue-inertia",
+    "imports": [
+      "_primevue-core-CEUhVme8.js"
+    ]
   },
   "node_modules/leaflet/dist/images/layers-2x.png": {
     "file": "assets/layers-2x-Bpkbi35X.png",
@@ -44,69 +112,67 @@
     "src": "node_modules/primeicons/fonts/primeicons.woff2"
   },
   "resources/js/Pages/Dashboard.vue": {
-    "file": "assets/Dashboard-DsenPFih.js",
+    "file": "assets/Dashboard-D5rtAzh0.js",
     "name": "Dashboard",
     "src": "resources/js/Pages/Dashboard.vue",
     "isDynamicEntry": true,
     "imports": [
-      "resources/js/app.js"
+      "_vue-inertia-BW-flMNH.js",
+      "_primevue-core-CEUhVme8.js"
     ]
   },
   "resources/js/Pages/Login.vue": {
-    "file": "assets/Login-BpQ5Nyqg.js",
+    "file": "assets/Login-DfcBjI6l.js",
     "name": "Login",
     "src": "resources/js/Pages/Login.vue",
     "isDynamicEntry": true,
     "imports": [
-      "resources/js/app.js"
+      "_vue-inertia-BW-flMNH.js",
+      "_primevue-core-CEUhVme8.js"
     ]
   },
   "resources/js/Pages/Track.vue": {
-    "file": "assets/Track-C_eCjDaG.js",
+    "file": "assets/Track-WrmICuvG.js",
     "name": "Track",
     "src": "resources/js/Pages/Track.vue",
     "isDynamicEntry": true,
     "imports": [
-      "resources/js/app.js"
+      "_vue-inertia-BW-flMNH.js",
+      "_primevue-core-CEUhVme8.js"
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-d9JTlgzp.js",
+    "file": "assets/app-DrdWDPYn.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
+    "imports": [
+      "_vue-inertia-BW-flMNH.js",
+      "_primevue-core-CEUhVme8.js",
+      "_primevue-table-HN9Q1o8s.js",
+      "_primevue-overlays-DuTXVMzT.js",
+      "_primevue-theme-DR8wQEkI.js"
+    ],
     "dynamicImports": [
       "resources/js/Pages/Dashboard.vue",
       "resources/js/Pages/Login.vue",
       "resources/js/Pages/Track.vue"
     ],
     "css": [
-      "assets/app-C2iXBRLY.css",
-      "assets/app-CKP5LDsl.css"
-    ],
-    "assets": [
-      "assets/primeicons-DMOk5skT.eot",
-      "assets/primeicons-C6QP2o4f.woff2",
-      "assets/primeicons-WjwUDZjB.woff",
-      "assets/primeicons-MpK4pl85.ttf",
-      "assets/primeicons-Dr5RGzOO.svg"
+      "assets/app-DA4HjqP1.css"
     ]
   },
   "resources/js/livewire.js": {
-    "file": "assets/livewire-DIz2nVyG.js",
+    "file": "assets/livewire-CxF6sBKG.js",
     "name": "livewire",
     "src": "resources/js/livewire.js",
     "isEntry": true,
-    "css": [
-      "assets/livewire-1DTFk8zz.css",
-      "assets/app-CKP5LDsl.css"
+    "imports": [
+      "_rolldown-runtime-Bh1tDfsg.js",
+      "_realtime-map-C3iavgvM.js"
     ],
-    "assets": [
-      "assets/marker-icon-2x-_ZA0WGCc.png",
-      "assets/marker-icon-hN30_KVU.png",
-      "assets/marker-shadow-f7SaPCxT.png",
-      "assets/layers-BWBAp2CZ.png",
-      "assets/layers-2x-Bpkbi35X.png"
+    "css": [
+      "assets/app-DA4HjqP1.css"
     ]
   }
 }
